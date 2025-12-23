@@ -17,6 +17,8 @@
 
 	import CodeEditor from '$lib/components/common/CodeEditor.svelte';
 	import SvgPanZoom from '$lib/components/common/SVGPanZoom.svelte';
+	import DraftCard from '$lib/components/severnaya/DraftCard.svelte';
+	import { ingestUrl, getDraft, updateDraft, generateName, commitDraft } from '$lib/apis/severnaya';
 
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte';
@@ -59,8 +61,30 @@
 
 	let _token = null;
 
-	let renderHTML = null;
-	let renderError = null;
+	let renderHTML: string | null = null;
+	let renderError: string | null = null;
+	let widgetData: {
+		draft: {
+			id: string;
+			status: string;
+			final_data?: {
+				kind?: string;
+				type?: string;
+				brand?: string;
+				article?: string;
+				description?: string;
+				generated_name?: string;
+				images?: Array<{ src: string; alt?: string }>;
+			};
+			source_payload?: string;
+		};
+		meta?: {
+			can_edit?: boolean;
+			can_commit?: boolean;
+			source_label?: string;
+			created_at?: string;
+		};
+	} | null = null;
 
 	let highlightedCode = null;
 	let executing = false;
@@ -359,6 +383,26 @@
 				renderError = $i18n.t('Failed to render visualization') + `: ${errorMsg}`;
 				renderHTML = null;
 			}
+		} else if (lang === 'widget' && (token?.raw ?? '').slice(-4).includes('```')) {
+			console.log('[CodeBlock] Rendering widget, lang:', lang, 'code length:', code.length);
+			try {
+				// Парсим JSON из code блока
+				const parsed = JSON.parse(code);
+				console.log('[CodeBlock] Parsed widget data:', parsed);
+				if (parsed.type === 'widget' && parsed.widget_type === 'draft' && parsed.widget_data) {
+					widgetData = parsed.widget_data;
+					console.log('[CodeBlock] Widget data set:', widgetData);
+				} else {
+					console.error('[CodeBlock] Invalid widget format:', parsed);
+					renderError = 'Invalid widget format';
+					widgetData = null;
+				}
+			} catch (error) {
+				console.error('[CodeBlock] Failed to parse widget data:', error, 'code:', code.substring(0, 200));
+				const errorMsg = error instanceof Error ? error.message : String(error);
+				renderError = $i18n.t('Failed to render widget') + `: ${errorMsg}`;
+				widgetData = null;
+			}
 		}
 	};
 
@@ -420,7 +464,77 @@
 		class="relative {className} flex flex-col rounded-3xl border border-gray-100/30 dark:border-gray-850/30 my-0.5"
 		dir="ltr"
 	>
-		{#if ['mermaid', 'vega', 'vega-lite'].includes(lang)}
+		{#if lang === 'widget'}
+			{#if widgetData && widgetData.draft}
+				<div class="p-4">
+					<DraftCard
+						images={widgetData.draft.final_data?.images || []}
+						title={widgetData.draft.final_data?.generated_name || widgetData.draft.final_data?.description || ''}
+						source={widgetData.draft.source_payload || ''}
+						kind={widgetData.draft.final_data?.kind || ''}
+						type={widgetData.draft.final_data?.type || ''}
+						brand={widgetData.draft.final_data?.brand || ''}
+						article={widgetData.draft.final_data?.article || ''}
+						onGenerateTitle={async () => {
+							if (!widgetData?.draft) return;
+							try {
+								const token = localStorage.token || '';
+								const response = await generateName(token, widgetData.draft.id);
+								// Обновляем данные виджета
+								if (widgetData.draft.final_data) {
+									widgetData.draft.final_data = {
+										...widgetData.draft.final_data,
+										generated_name: response.generated_name
+									};
+								}
+							} catch (error) {
+								console.error('Error generating name:', error);
+							}
+						}}
+						onSave={async () => {
+							if (!widgetData?.draft) return;
+							try {
+								const token = localStorage.token || '';
+								await updateDraft(token, widgetData.draft.id, {
+									kind: widgetData.draft.final_data?.kind,
+									type: widgetData.draft.final_data?.type,
+									brand: widgetData.draft.final_data?.brand,
+									article: widgetData.draft.final_data?.article,
+									description: widgetData.draft.final_data?.description
+								});
+							} catch (error) {
+								console.error('Error saving draft:', error);
+							}
+						}}
+						onSendTo1C={async () => {
+							if (!widgetData?.draft) return;
+							try {
+								const token = localStorage.token || '';
+								await commitDraft(token, widgetData.draft.id);
+								// Обновляем статус
+								widgetData.draft.status = 'ready_to_sync';
+							} catch (error) {
+								console.error('Error committing draft:', error);
+							}
+						}}
+						loadingSave={false}
+						loadingSendTo1C={false}
+						loadingGenerateTitle={false}
+					/>
+				</div>
+			{:else}
+				<div class="p-3">
+					{#if renderError}
+						<div
+							class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl mb-2"
+						>
+							{renderError}
+						</div>
+					{/if}
+					<pre>{code}</pre>
+				</div>
+			{/if}
+		{:else if ['mermaid', 'vega', 'vega-lite'].includes(lang)}
 			{#if renderHTML}
 				<SvgPanZoom
 					className=" rounded-3xl max-h-fit overflow-hidden"

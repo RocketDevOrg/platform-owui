@@ -35,6 +35,10 @@
 		articleValue = article;
 	}
 
+	$: {
+		console.log('[DraftCard] Images:', images, 'length:', images?.length);
+	}
+
 	const handleSave = () => {
 		if (onSave) {
 			onSave();
@@ -63,9 +67,11 @@
 <div
 	class="mx-auto shadow-3xl min-w-fit min-h-fit scrollbar-hidden bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-lg border border-white dark:border-gray-850 max-w-[500px] overflow-hidden"
 >
-	<div class="w-full mx-auto flex justify-center">
-		<ImageSlider {images} width={500} height={300} />
-	</div>
+	{#if images && images.length > 0}
+		<div class="w-full mx-auto flex justify-center">
+			<ImageSlider {images} width={500} height={300} />
+		</div>
+	{/if}
 
 	<!-- Форма-->
 	<form class="p-3 flex flex-col">

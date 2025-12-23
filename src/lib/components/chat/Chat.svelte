@@ -1174,7 +1174,13 @@
 			session_id: $socket?.id,
 			id: responseMessageId
 		}).catch((error) => {
-			toast.error(`${error}`);
+			// ИЗМЕНЕНО: Игнорируем ошибку "Model not found", так как все запросы идут в FastAPI
+			const errorMessageStr = String(error).toLowerCase();
+			if (!errorMessageStr.includes('model not found')) {
+				toast.error(`${error}`);
+			} else {
+				console.log('Ignoring "Model not found" error in chatCompletedHandler - using FastAPI');
+			}
 			messages.at(-1).error = { content: error };
 
 			return null;
@@ -1320,12 +1326,22 @@
 		const userMessageId = uuidv4();
 		const responseMessageId = uuidv4();
 
+		// ИЗМЕНЕНО: Добавляем специальный текст в зависимости от actionType для определения типа запроса
+		let finalPrompt = userPrompt || '';
+		if (actionType === 'ingest') {
+			// Добавляем маркер для создания карточки
+			finalPrompt = `Создать карточку: ${finalPrompt}`;
+		} else if (actionType === 'search') {
+			// Добавляем маркер для поиска аналогов
+			finalPrompt = `Поиск аналогов: ${finalPrompt}`;
+		}
+
 		const userMessage = {
 			id: userMessageId,
 			parentId: parentMessage ? parentMessage.id : null,
 			childrenIds: [responseMessageId],
 			role: 'user',
-			content: userPrompt ? userPrompt : `[PROMPT] ${userMessageId}`,
+			content: finalPrompt || `[PROMPT] ${userMessageId}`,
 			timestamp: Math.floor(Date.now() / 1000)
 		};
 
@@ -2065,6 +2081,14 @@
 				errorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
 			}
 
+			// ИЗМЕНЕНО: Игнорируем ошибку "Model not found", так как все запросы идут в FastAPI
+			// и проверка модели не нужна
+			const errorMessageStr = String(errorMessage).toLowerCase();
+			if (errorMessageStr.includes('model not found')) {
+				console.log('Ignoring "Model not found" error - using FastAPI');
+				return null;
+			}
+
 			// ИЗМЕНЕНО: Сохраняем читаемое сообщение об ошибке в content
 			const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
 			responseMessage.content = readableErrorMessage;
@@ -2076,11 +2100,16 @@
 			history.messages[responseMessageId] = responseMessage;
 			history.currentId = responseMessageId;
 
-			// Сохраняем чат в бэкенде Open WebUI с сообщением об ошибке
-			const messages = createMessagesList(history, responseMessageId);
-			await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
-
-			toast.error(`${errorMessage}`);
+			// ИЗМЕНЕНО: Не сохраняем чат и не показываем toast для ошибки "Model not found"
+			// Проверка уже была выше, но на всякий случай проверяем еще раз
+			if (!errorMessageStr.includes('model not found')) {
+				// Сохраняем чат в бэкенде Open WebUI с сообщением об ошибке
+				const messages = createMessagesList(history, responseMessageId);
+				await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+				toast.error(`${errorMessage}`);
+			} else {
+				console.log('Skipping chat save and toast for "Model not found" error - using FastAPI');
+			}
 
 			return null;
 		});
@@ -2206,6 +2235,29 @@
 		}
 
 		console.error(innerError);
+		
+		// ИЗМЕНЕНО: Извлекаем сообщение об ошибке и проверяем на "Model not found"
+		let extractedErrorMessage = '';
+		if ('detail' in innerError) {
+			extractedErrorMessage = innerError.detail;
+		} else if ('error' in innerError) {
+			if ('message' in innerError.error) {
+				extractedErrorMessage = innerError.error.message;
+			} else {
+				extractedErrorMessage = innerError.error;
+			}
+		} else if ('message' in innerError) {
+			extractedErrorMessage = innerError.message;
+		}
+		
+		// ИЗМЕНЕНО: Игнорируем ошибку "Model not found", так как все запросы идут в FastAPI
+		const errorMessageStr = String(extractedErrorMessage).toLowerCase();
+		if (errorMessageStr.includes('model not found')) {
+			console.log('Ignoring "Model not found" error in handleOpenAIError - using FastAPI');
+			return;
+		}
+		
+		// Показываем toast только для других ошибок
 		if ('detail' in innerError) {
 			// FastAPI error
 			toast.error(innerError.detail);

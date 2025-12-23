@@ -1527,8 +1527,11 @@ async def chat_completion(
     form_data: dict,
     user=Depends(get_verified_user),
 ):
-    if not request.app.state.MODELS:
-        await get_all_models(request, user=user)
+    # ПРОПУСКАЕМ ЗАГРУЗКУ МОДЕЛЕЙ: Все запросы идут напрямую в FastAPI
+    # Загрузка моделей не нужна, так как FastAPI обрабатывает все запросы
+    # ВАЖНО: Когда контур будет доступен, можно будет вернуть загрузку моделей
+    # if not request.app.state.MODELS:
+    #     await get_all_models(request, user=user)
 
     model_id = form_data.get("model", None)
     model_item = form_data.pop("model_item", {})
@@ -1536,27 +1539,41 @@ async def chat_completion(
 
     metadata = {}
     try:
-        if not model_item.get("direct", False):
-            if model_id not in request.app.state.MODELS:
-                raise Exception("Model not found")
-
-            model = request.app.state.MODELS[model_id]
-            model_info = Models.get_model_by_id(model_id)
-
-            # Check if user has access to the model
-            if not BYPASS_MODEL_ACCESS_CONTROL and (
-                user.role != "admin" or not BYPASS_ADMIN_ACCESS_CONTROL
-            ):
-                try:
-                    check_model_access(user, model)
-                except Exception as e:
-                    raise e
-        else:
-            model = model_item
-            model_info = None
-
-            request.state.direct = True
-            request.state.model = model
+        # ПРОПУСКАЕМ ПРОВЕРКУ МОДЕЛИ: Все запросы идут напрямую в FastAPI
+        # Проверка модели не нужна, так как FastAPI обрабатывает все запросы
+        # ВАЖНО: Когда контур будет доступен, можно будет вернуть проверку модели
+        # Для этого нужно раскомментировать код ниже и закомментировать создание фиктивной модели
+        
+        # Создаем фиктивную модель для совместимости с остальным кодом
+        model = {
+            "id": model_id or "fastapi",
+            "name": "FastAPI",
+            "owned_by": "fastapi"
+        }
+        model_info = None
+        
+        # ЗАКОММЕНТИРОВАНО: Проверка модели (не нужна при работе с FastAPI)
+        # if not model_item.get("direct", False):
+        #     if model_id not in request.app.state.MODELS:
+        #         raise Exception("Model not found")
+        #
+        #     model = request.app.state.MODELS[model_id]
+        #     model_info = Models.get_model_by_id(model_id)
+        #
+        #     # Check if user has access to the model
+        #     if not BYPASS_MODEL_ACCESS_CONTROL and (
+        #         user.role != "admin" or not BYPASS_ADMIN_ACCESS_CONTROL
+        #     ):
+        #         try:
+        #             check_model_access(user, model)
+        #         except Exception as e:
+        #             raise e
+        # else:
+        #     model = model_item
+        #     model_info = None
+        #
+        #     request.state.direct = True
+        #     request.state.model = model
 
         model_info_params = (
             model_info.params.model_dump() if model_info and model_info.params else {}
