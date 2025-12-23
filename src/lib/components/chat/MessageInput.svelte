@@ -1668,7 +1668,7 @@
 								</div>
 
 								<div class="self-end flex space-x-1 mr-1 shrink-0">
-									{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
+									{#if false && (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 										<!-- {$i18n.t('Record voice')} -->
 										<Tooltip content={$i18n.t('Dictate')}>
 											<button
