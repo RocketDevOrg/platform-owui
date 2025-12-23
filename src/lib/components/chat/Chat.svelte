@@ -68,6 +68,7 @@
 		updateChatFolderIdById
 	} from '$lib/apis/chats';
 	import { generateOpenAIChatCompletion } from '$lib/apis/openai';
+	import { generateFastAPIChatCompletion } from '$lib/apis/severnaya';
 	import { processWeb, processWebSearch, processYoutubeVideo } from '$lib/apis/retrieval';
 	import { getAndUpdateUserLocation, getUserSettings } from '$lib/apis/users';
 	import {
@@ -123,7 +124,12 @@
 
 	let chatIdUnsubscriber: Unsubscriber | undefined;
 
-	let selectedModels = [''];
+	// ============================================================
+	// ИЗМЕНЕНО: Убран выбор модели, всегда используем FastAPI
+	// Для совместимости устанавливаем дефолтное значение
+	// ============================================================
+	let selectedModels = ['fastapi']; // Дефолтная модель для FastAPI
+	// ЗАКОММЕНТИРОВАНО: let selectedModels = [''];
 	let atSelectedModel: Model | undefined;
 	let selectedModelIds = [];
 	$: if (atSelectedModel !== undefined) {
@@ -137,6 +143,7 @@
 	let imageGenerationEnabled = false;
 	let webSearchEnabled = false;
 	let codeInterpreterEnabled = false;
+	let actionType: 'ingest' | 'search' = 'ingest';
 
 	let showCommands = false;
 
@@ -971,12 +978,18 @@
 			selectedModels = selectedModels.filter((modelId) => availableModels.includes(modelId));
 		}
 
+		// ============================================================
+		// ИЗМЕНЕНО: Установка дефолтной модели для FastAPI
+		// ============================================================
 		if (selectedModels.length === 0 || (selectedModels.length === 1 && selectedModels[0] === '')) {
-			if (availableModels.length > 0) {
-				selectedModels = [availableModels?.at(0) ?? ''];
-			} else {
-				selectedModels = [''];
-			}
+			// Всегда используем 'fastapi' как дефолтную модель
+			selectedModels = ['fastapi'];
+			// ЗАКОММЕНТИРОВАНО: Старая логика выбора модели
+			// if (availableModels.length > 0) {
+			// 	selectedModels = [availableModels?.at(0) ?? ''];
+			// } else {
+			// 	selectedModels = [''];
+			// }
 		}
 
 		await showControls.set(false);
@@ -1268,62 +1281,89 @@
 
 	const createMessagePair = async (userPrompt) => {
 		messageInput?.setText('');
-		if (selectedModels.length === 0) {
-			toast.error($i18n.t('Model not selected'));
-		} else {
-			const modelId = selectedModels[0];
-			const model = $models.filter((m) => m.id === modelId).at(0);
-
-			const messages = createMessagesList(history, history.currentId);
-			const parentMessage = messages.length !== 0 ? messages.at(-1) : null;
-
-			const userMessageId = uuidv4();
-			const responseMessageId = uuidv4();
-
-			const userMessage = {
-				id: userMessageId,
-				parentId: parentMessage ? parentMessage.id : null,
-				childrenIds: [responseMessageId],
-				role: 'user',
-				content: userPrompt ? userPrompt : `[PROMPT] ${userMessageId}`,
-				timestamp: Math.floor(Date.now() / 1000)
-			};
-
-			const responseMessage = {
-				id: responseMessageId,
-				parentId: userMessageId,
-				childrenIds: [],
-				role: 'assistant',
-				content: `[RESPONSE] ${responseMessageId}`,
-				done: true,
-
-				model: modelId,
-				modelName: model.name ?? model.id,
-				modelIdx: 0,
-				timestamp: Math.floor(Date.now() / 1000)
-			};
-
-			if (parentMessage) {
-				parentMessage.childrenIds.push(userMessageId);
-				history.messages[parentMessage.id] = parentMessage;
-			}
-			history.messages[userMessageId] = userMessage;
-			history.messages[responseMessageId] = responseMessage;
-
-			history.currentId = responseMessageId;
-
-			await tick();
-
-			if (autoScroll) {
-				scrollToBottom();
-			}
-
-			if (messages.length === 0) {
-				await initChatHandler(history);
-			} else {
-				await saveChatHandler($chatId, history);
-			}
+		// ============================================================
+		// ИЗМЕНЕНО: Убрана проверка выбора модели, всегда используем FastAPI
+		// ============================================================
+		// if (selectedModels.length === 0) {
+		// 	toast.error($i18n.t('Model not selected'));
+		// } else {
+		// Устанавливаем дефолтную модель, если не выбрана
+		if (selectedModels.length === 0 || (selectedModels.length === 1 && selectedModels[0] === '')) {
+			selectedModels = ['fastapi'];
 		}
+		
+		const modelId = selectedModels[0];
+		let model = $models.filter((m) => m.id === modelId).at(0);
+		
+		// Создаем фиктивную модель для FastAPI, если не найдена
+		if (!model) {
+			model = {
+				id: 'fastapi',
+				name: 'Помощник',
+				info: {
+					params: {
+						stream_response: true
+					},
+					meta: {
+						capabilities: {
+							vision: true,
+							usage: false
+						}
+					}
+				}
+			} as unknown as Model;
+		}
+
+		const messages = createMessagesList(history, history.currentId);
+		const parentMessage = messages.length !== 0 ? messages.at(-1) : null;
+
+		const userMessageId = uuidv4();
+		const responseMessageId = uuidv4();
+
+		const userMessage = {
+			id: userMessageId,
+			parentId: parentMessage ? parentMessage.id : null,
+			childrenIds: [responseMessageId],
+			role: 'user',
+			content: userPrompt ? userPrompt : `[PROMPT] ${userMessageId}`,
+			timestamp: Math.floor(Date.now() / 1000)
+		};
+
+		const responseMessage = {
+			id: responseMessageId,
+			parentId: userMessageId,
+			childrenIds: [],
+			role: 'assistant',
+			content: `[RESPONSE] ${responseMessageId}`,
+			done: true,
+			model: modelId,
+			modelName: model.name ?? model.id,
+			modelIdx: 0,
+			timestamp: Math.floor(Date.now() / 1000)
+		};
+
+		if (parentMessage) {
+			parentMessage.childrenIds.push(userMessageId);
+			history.messages[parentMessage.id] = parentMessage;
+		}
+		history.messages[userMessageId] = userMessage;
+		history.messages[responseMessageId] = responseMessage;
+
+		history.currentId = responseMessageId;
+
+		await tick();
+
+		if (autoScroll) {
+			scrollToBottom();
+		}
+
+		if (messages.length === 0) {
+			await initChatHandler(history);
+		} else {
+			await saveChatHandler($chatId, history);
+		}
+		// ЗАКОММЕНТИРОВАНО: закрывающая скобка для else
+		// }
 	};
 
 	const addMessages = async ({ modelId, parentId, messages }) => {
@@ -1561,9 +1601,18 @@
 			toast.error($i18n.t('Please enter a prompt'));
 			return;
 		}
-		if (selectedModels.includes('')) {
-			toast.error($i18n.t('Model not selected'));
-			return;
+		// ============================================================
+		// ЗАКОММЕНТИРОВАНО: Проверка выбора модели
+		// Теперь всегда используем FastAPI, выбор модели не требуется
+		// ============================================================
+		// if (selectedModels.includes('')) {
+		// 	toast.error($i18n.t('Model not selected'));
+		// 	return;
+		// }
+		
+		// Устанавливаем дефолтную модель для FastAPI, если не выбрана
+		if (selectedModels.includes('') || selectedModels.length === 0) {
+			selectedModels = ['fastapi'];
 		}
 
 		if (
@@ -1685,37 +1734,58 @@
 
 		// Create response messages for each selected model
 		for (const [_modelIdx, modelId] of selectedModelIds.entries()) {
-			const model = $models.filter((m) => m.id === modelId).at(0);
+			let model = $models.filter((m) => m.id === modelId).at(0);
 
-			if (model) {
-				let responseMessageId = uuidv4();
-				let responseMessage = {
-					parentId: parentId,
-					id: responseMessageId,
-					childrenIds: [],
-					role: 'assistant',
-					content: '',
-					model: model.id,
-					modelName: model.name ?? model.id,
-					modelIdx: modelIdx ? modelIdx : _modelIdx,
-					timestamp: Math.floor(Date.now() / 1000) // Unix epoch
-				};
-
-				// Add message to history and Set currentId to messageId
-				history.messages[responseMessageId] = responseMessage;
-				history.currentId = responseMessageId;
-
-				// Append messageId to childrenIds of parent message
-				if (parentId !== null && history.messages[parentId]) {
-					// Add null check before accessing childrenIds
-					history.messages[parentId].childrenIds = [
-						...history.messages[parentId].childrenIds,
-						responseMessageId
-					];
-				}
-
-				responseMessageIds[`${modelId}-${modelIdx ? modelIdx : _modelIdx}`] = responseMessageId;
+			// ============================================================
+			// ИЗМЕНЕНО: Если модель не найдена, создаем фиктивную модель для FastAPI
+			// ============================================================
+			if (!model) {
+				// Создаем фиктивную модель для FastAPI
+				model = {
+					id: 'fastapi',
+					name: 'Помощник',
+					info: {
+						params: {
+							stream_response: true
+						},
+						meta: {
+							capabilities: {
+								vision: true,
+								usage: false
+							}
+						}
+					}
+				} as unknown as Model;
 			}
+
+			// Убрана проверка if (model) - теперь всегда создаем сообщение
+			let responseMessageId = uuidv4();
+			let responseMessage = {
+				parentId: parentId,
+				id: responseMessageId,
+				childrenIds: [],
+				role: 'assistant',
+				content: '',
+				model: model.id,
+				modelName: model.name ?? model.id,
+				modelIdx: modelIdx ? modelIdx : _modelIdx,
+				timestamp: Math.floor(Date.now() / 1000) // Unix epoch
+			};
+
+			// Add message to history and Set currentId to messageId
+			history.messages[responseMessageId] = responseMessage;
+			history.currentId = responseMessageId;
+
+			// Append messageId to childrenIds of parent message
+			if (parentId !== null && history.messages[parentId]) {
+				// Add null check before accessing childrenIds
+				history.messages[parentId].childrenIds = [
+					...history.messages[parentId].childrenIds,
+					responseMessageId
+				];
+			}
+
+			responseMessageIds[`${modelId}-${modelIdx ? modelIdx : _modelIdx}`] = responseMessageId;
 		}
 		history = history;
 
@@ -1733,41 +1803,65 @@
 		await Promise.all(
 			selectedModelIds.map(async (modelId, _modelIdx) => {
 				console.log('modelId', modelId);
-				const model = $models.filter((m) => m.id === modelId).at(0);
+				let model = $models.filter((m) => m.id === modelId).at(0);
 
-				if (model) {
-					// If there are image files, check if model is vision capable
-					const hasImages = createMessagesList(_history, parentId).some((message) =>
-						message.files?.some((file) => file.type === 'image')
-					);
-
-					if (hasImages && !(model.info?.meta?.capabilities?.vision ?? true)) {
-						toast.error(
-							$i18n.t('Model {{modelName}} is not vision capable', {
-								modelName: model.name ?? model.id
-							})
-						);
-					}
-
-					let responseMessageId =
-						responseMessageIds[`${modelId}-${modelIdx ? modelIdx : _modelIdx}`];
-					const chatEventEmitter = await getChatEventEmitter(model.id, _chatId);
-
-					scrollToBottom();
-					await sendMessageSocket(
-						model,
-						messages && messages.length > 0
-							? messages
-							: createMessagesList(_history, responseMessageId),
-						_history,
-						responseMessageId,
-						_chatId
-					);
-
-					if (chatEventEmitter) clearInterval(chatEventEmitter);
-				} else {
-					toast.error($i18n.t(`Model {{modelId}} not found`, { modelId }));
+				// ============================================================
+				// ИЗМЕНЕНО: Если модель не найдена, создаем фиктивную модель для FastAPI
+				// ============================================================
+				if (!model) {
+					// Создаем фиктивную модель для FastAPI
+					model = {
+						id: 'fastapi',
+						name: 'Помощник',
+						info: {
+							params: {
+								stream_response: true
+							},
+							meta: {
+								capabilities: {
+									vision: true,
+									usage: false
+								}
+							}
+						}
+					} as Model;
+					console.log('Using FastAPI default model');
 				}
+
+				// If there are image files, check if model is vision capable
+				const hasImages = createMessagesList(_history, parentId).some((message) =>
+					message.files?.some((file) => file.type === 'image')
+				);
+
+				if (hasImages && !(model.info?.meta?.capabilities?.vision ?? true)) {
+					toast.error(
+						$i18n.t('Model {{modelName}} is not vision capable', {
+							modelName: model.name ?? model.id
+						})
+					);
+				}
+
+				let responseMessageId =
+					responseMessageIds[`${modelId}-${modelIdx ? modelIdx : _modelIdx}`];
+				const chatEventEmitter = await getChatEventEmitter(model.id, _chatId);
+
+				scrollToBottom();
+				await sendMessageSocket(
+					model,
+					messages && messages.length > 0
+						? messages
+						: createMessagesList(_history, responseMessageId),
+					_history,
+					responseMessageId,
+					_chatId
+				);
+
+				if (chatEventEmitter) clearInterval(chatEventEmitter);
+				
+				// ЗАКОММЕНТИРОВАНО: Проверка существования модели
+				// } else {
+				// 	toast.error($i18n.t(`Model {{modelId}} not found`, { modelId }));
+				// }
 			})
 		);
 
@@ -1923,12 +2017,13 @@
 			}
 		}
 
-		const res = await generateOpenAIChatCompletion(
+		// Прямое обращение к FastAPI, обходя бэкенд Open WebUI
+		const res = await generateFastAPIChatCompletion(
 			localStorage.token,
 			{
-				stream: stream,
-				model: model.id,
 				messages: messages,
+				model: model.id,
+				stream: stream,
 				params: {
 					...$settings?.params,
 					...params,
@@ -1939,51 +2034,22 @@
 								)
 							: undefined
 				},
-
-				files: (files?.length ?? 0) > 0 ? files : undefined,
-
-				filter_ids: selectedFilterIds.length > 0 ? selectedFilterIds : undefined,
-				tool_ids: toolIds.length > 0 ? toolIds : undefined,
-				tool_servers: ($toolServers ?? []).filter(
-					(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
-				),
-				features: getFeatures(),
-				variables: {
-					...getPromptVariables($user?.name, $settings?.userLocation ? userLocation : undefined)
-				},
-				model_item: $models.find((m) => m.id === model.id),
-
-				session_id: $socket?.id,
-				chat_id: $chatId,
-
-				id: responseMessageId,
-				parent_id: userMessage?.id ?? null,
-
-				background_tasks: {
-					...(!$temporaryChatEnabled &&
-					(messages.length == 1 ||
-						(messages.length == 2 &&
-							messages.at(0)?.role === 'system' &&
-							messages.at(1)?.role === 'user')) &&
-					(selectedModels[0] === model.id || atSelectedModel !== undefined)
-						? {
-								title_generation: $settings?.title?.auto ?? true,
-								tags_generation: $settings?.autoTags ?? true
-							}
-						: {}),
-					follow_up_generation: $settings?.autoFollowUps ?? true
-				},
-
-				...(stream && (model.info?.meta?.capabilities?.usage ?? false)
-					? {
-							stream_options: {
-								include_usage: true
-							}
-						}
-					: {})
-			},
-			`${WEBUI_BASE_URL}/api`
-		).catch(async (error) => {
+				metadata: {
+					user_id: $user?.id,
+					chat_id: $chatId,
+					message_id: responseMessageId,
+					session_id: $socket?.id
+				}
+			}
+		).then(async (response) => {
+			// Для streaming ответов возвращаем Response объект
+			if (stream && response.body) {
+				return { ok: true, body: response.body, task_id: null };
+			}
+			// Для non-streaming ответов парсим JSON
+			const json = await response.json();
+			return { ...json, ok: true, task_id: null };
+		}).catch(async (error) => {
 			console.log(error);
 
 			let errorMessage = error;
@@ -1991,21 +2057,30 @@
 				errorMessage = error.error.message;
 			} else if (error?.message) {
 				errorMessage = error.message;
+			} else if (error?.detail) {
+				errorMessage = error.detail;
 			}
 
 			if (typeof errorMessage === 'object') {
-				errorMessage = $i18n.t(`Uh-oh! There was an issue with the response.`);
+				errorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
 			}
 
-			toast.error(`${errorMessage}`);
+			// ИЗМЕНЕНО: Сохраняем читаемое сообщение об ошибке в content
+			const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+			responseMessage.content = readableErrorMessage;
 			responseMessage.error = {
-				content: error
+				content: errorMessage
 			};
-
 			responseMessage.done = true;
 
 			history.messages[responseMessageId] = responseMessage;
 			history.currentId = responseMessageId;
+
+			// Сохраняем чат в бэкенде Open WebUI с сообщением об ошибке
+			const messages = createMessagesList(history, responseMessageId);
+			await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+
+			toast.error(`${errorMessage}`);
 
 			return null;
 		});
@@ -2013,10 +2088,106 @@
 		if (res) {
 			if (res.error) {
 				await handleOpenAIError(res.error, responseMessage);
-			} else {
-				if (taskIds) {
-					taskIds.push(res.task_id);
+			} else if (res.body && stream) {
+				// Обработка streaming ответа напрямую от FastAPI
+				generating = true;
+				const textStream = await createOpenAITextStream(res.body, $settings.splitLargeChunks);
+				for await (const update of textStream) {
+					const { value, done, sources, error, usage } = update;
+					if (error) {
+						// ИЗМЕНЕНО: Если ошибка в потоке, сохраняем читаемое сообщение
+						const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+						responseMessage.content = readableErrorMessage;
+						responseMessage.error = {
+							content: error
+						};
+						generating = false;
+						responseMessage.done = true;
+						history.messages[responseMessageId] = responseMessage;
+						
+						// Сохраняем чат в бэкенде Open WebUI с сообщением об ошибке
+						const messages = createMessagesList(history, responseMessageId);
+						await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+						break;
+					}
+					
+					if (done) {
+						generating = false;
+						responseMessage.done = true;
+						
+						// ИЗМЕНЕНО: Если контент пустой после завершения потока, показываем ошибку
+						if (!responseMessage.content || responseMessage.content.trim() === '') {
+							const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+							responseMessage.content = readableErrorMessage;
+							responseMessage.error = {
+								content: $i18n.t(`Empty response from server`)
+							};
+						}
+						
+						history.messages[responseMessageId] = responseMessage;
+						
+						// Сохраняем чат в бэкенде Open WebUI
+						const messages = createMessagesList(history, responseMessageId);
+						await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+						break;
+					}
+
+					if (responseMessage.content == '' && value == '\n') {
+						continue;
+					} else {
+						responseMessage.content += value;
+						history.messages[responseMessageId] = responseMessage;
+					}
+
+					if (autoScroll) {
+						scrollToBottom();
+					}
+				}
+				
+				// ИЗМЕНЕНО: Проверяем, что контент не пустой после завершения потока
+				if (!responseMessage.done) {
+					responseMessage.done = true;
+					generating = false;
+					
+					if (!responseMessage.content || responseMessage.content.trim() === '') {
+						const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+						responseMessage.content = readableErrorMessage;
+						responseMessage.error = {
+							content: $i18n.t(`Empty response from server`)
+						};
+					}
+					
+					history.messages[responseMessageId] = responseMessage;
+					
+					// Сохраняем чат в бэкенде Open WebUI
+					const messages = createMessagesList(history, responseMessageId);
+					await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+				}
+			} else if (res.choices) {
+				// Обработка non-streaming ответа
+				const content = res.choices[0]?.message?.content || '';
+				
+				// ИЗМЕНЕНО: Если контент пустой, показываем сообщение об ошибке
+				if (!content || content.trim() === '') {
+					const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+					responseMessage.content = readableErrorMessage;
+					responseMessage.error = {
+						content: $i18n.t(`Empty response from server`)
+					};
 				} else {
+					responseMessage.content = content;
+				}
+				
+				responseMessage.done = true;
+				history.messages[responseMessageId] = responseMessage;
+				
+				// Сохраняем чат в бэкенде Open WebUI
+				const messages = createMessagesList(history, responseMessageId);
+				await chatCompletedHandler(_chatId, model.id, responseMessageId, messages);
+			} else {
+				if (taskIds && res.task_id) {
+					taskIds.push(res.task_id);
+				} else if (res.task_id) {
 					taskIds = [res.task_id];
 				}
 			}
@@ -2054,6 +2225,9 @@
 			errorMessage = innerError.message;
 		}
 
+		// ИЗМЕНЕНО: Сохраняем читаемое сообщение об ошибке в content
+		const readableErrorMessage = $i18n.t(`Ошибка. Попробуйте еще раз.`);
+		responseMessage.content = readableErrorMessage;
 		responseMessage.error = {
 			content: $i18n.t(`Uh-oh! There was an issue with the response.`) + '\n' + errorMessage
 		};
@@ -2066,6 +2240,11 @@
 		}
 
 		history.messages[responseMessage.id] = responseMessage;
+		
+		// ИЗМЕНЕНО: Сохраняем чат в бэкенде Open WebUI с сообщением об ошибке
+		const messages = createMessagesList(history, responseMessage.id);
+		const modelId = responseMessage.model || selectedModels[0] || 'fastapi';
+		await chatCompletedHandler($chatId, modelId, responseMessage.id, messages);
 	};
 
 	const stopResponse = async () => {
@@ -2516,6 +2695,7 @@
 									bind:imageGenerationEnabled
 									bind:codeInterpreterEnabled
 									bind:webSearchEnabled
+									bind:actionType
 									bind:atSelectedModel
 									bind:showCommands
 									toolServers={$toolServers}

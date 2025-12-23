@@ -7,6 +7,7 @@
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import PinSlash from '$lib/components/icons/PinSlash.svelte';
+	import ProfileImage from '$lib/components/chat/Messages/ProfileImage.svelte';
 
 	export let model = null;
 	export let shiftKey = false;
@@ -35,10 +36,10 @@
 			draggable="false"
 		>
 			<div class="self-center shrink-0">
-				<img
+				<ProfileImage
 					src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model.id}&lang=${$i18n.language}`}
-					class=" size-5 rounded-full -translate-x-[0.5px]"
-					alt="logo"
+					className="size-5 rounded-full -translate-x-[0.5px]"
+					modelId={model.id}
 				/>
 			</div>
 

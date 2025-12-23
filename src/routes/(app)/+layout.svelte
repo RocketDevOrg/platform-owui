@@ -9,7 +9,11 @@
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
 
+	import { getKnowledgeBases } from '$lib/apis/knowledge';
+	import { getFunctions } from '$lib/apis/functions';
 	import { getModels, getToolServersData, getVersionUpdates } from '$lib/apis';
+	import { getAllTags } from '$lib/apis/chats';
+	import { getPrompts } from '$lib/apis/prompts';
 	import { getTools } from '$lib/apis/tools';
 	import { getBanners } from '$lib/apis/configs';
 	import { getUserSettings } from '$lib/apis/users';
@@ -255,9 +259,10 @@
 		};
 		setupKeyboardShortcuts();
 
-		if ($user?.role === 'admin' && ($settings?.showChangelog ?? true)) {
-			showChangelog.set($settings?.version !== $config.version);
-		}
+		// Disabled: Show "What's New" modal on startup
+		// if ($user?.role === 'admin' && ($settings?.showChangelog ?? true)) {
+		// 	showChangelog.set($settings?.version !== $config.version);
+		// }
 
 		if ($user?.role === 'admin' || ($user?.permissions?.chat?.temporary ?? true)) {
 			if ($page.url.searchParams.get('temporary-chat') === 'true') {

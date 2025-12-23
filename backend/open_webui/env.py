@@ -882,3 +882,14 @@ PIP_PACKAGE_INDEX_OPTIONS = os.getenv("PIP_PACKAGE_INDEX_OPTIONS", "").split()
 ####################################
 
 EXTERNAL_PWA_MANIFEST_URL = os.environ.get("EXTERNAL_PWA_MANIFEST_URL")
+
+####################################
+# FASTAPI BACKEND INTEGRATION
+####################################
+
+# URL для FastAPI backend (для чата и работы с черновиками)
+FASTAPI_BASE_URL = os.environ.get("FASTAPI_BASE_URL", "http://localhost:8000/api/v1")
+# URL для чата в FastAPI (если отличается от базового)
+FASTAPI_CHAT_URL = os.environ.get("FASTAPI_CHAT_URL", f"{FASTAPI_BASE_URL}/chat/completions")
+# Использовать FastAPI для всех запросов чата вместо стандартных LLM
+USE_FASTAPI_FOR_CHAT = os.environ.get("USE_FASTAPI_FOR_CHAT", "true").lower() == "true"

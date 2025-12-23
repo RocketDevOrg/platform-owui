@@ -72,6 +72,17 @@ def serve(
             os.environ["USE_CUDA_DOCKER"] = "false"
             os.environ["LD_LIBRARY_PATH"] = ":".join(LD_LIBRARY_PATH)
 
+    # Ensure backend directory is in PYTHONPATH for workers (Windows multiprocessing)
+    backend_dir = Path(__file__).parent.parent
+    backend_dir_str = str(backend_dir.resolve())  # Use absolute path
+    
+    # Set PYTHONPATH before any imports
+    current_pythonpath = os.environ.get("PYTHONPATH", "")
+    pythonpath_parts = current_pythonpath.split(os.pathsep) if current_pythonpath else []
+    if backend_dir_str not in pythonpath_parts:
+        pythonpath_parts.insert(0, backend_dir_str)
+        os.environ["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    
     import open_webui.main  # we need set environment variables before importing main
     from open_webui.env import UVICORN_WORKERS  # Import the workers setting
 

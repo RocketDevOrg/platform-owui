@@ -66,6 +66,9 @@
 	import Wrench from '../icons/Wrench.svelte';
 	import CommandLine from '../icons/CommandLine.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
+	import Document from '../icons/Document.svelte';
+	import Search from '../icons/Search.svelte';
+	import ArrowRight from '../icons/ArrowRight.svelte';
 
 	import InputVariablesModal from './MessageInput/InputVariablesModal.svelte';
 	import Voice from '../icons/Voice.svelte';
@@ -109,6 +112,9 @@
 	export let webSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
 
+	// Опция действия: создание карточки или поиск аналогов
+	let actionType: 'ingest' | 'search' = 'ingest';
+
 	let showInputVariablesModal = false;
 	let inputVariablesModalCallback = (variableValues) => {};
 	let inputVariables = {};
@@ -138,7 +144,8 @@
 		selectedFilterIds,
 		imageGenerationEnabled,
 		webSearchEnabled,
-		codeInterpreterEnabled
+		codeInterpreterEnabled,
+		actionType
 	});
 
 	const inputVariableHandler = async (text: string): Promise<string> => {
@@ -1061,7 +1068,7 @@
 							id="message-input-container"
 							class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border {$temporaryChatEnabled
 								? 'border-dashed border-gray-100 dark:border-gray-800 hover:border-gray-200 focus-within:border-gray-200 hover:dark:border-gray-700 focus-within:dark:border-gray-700'
-								: ' border-gray-100/30 dark:border-gray-850/30 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'}  transition px-1 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
+								: ' border-gray-100 dark:border-gray-850 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'}  transition px-1 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
 							{#if atSelectedModel !== undefined}
@@ -1374,6 +1381,46 @@
 
 							<div class=" flex justify-between mt-0.5 mb-2.5 mx-0.5 max-w-full" dir="ltr">
 								<div class="ml-1 self-end flex items-center flex-1 max-w-[80%]">
+									<!-- Radio buttons для выбора действия: создание карточки или поиск аналогов -->
+									<div class="flex items-center gap-1 mr-2">
+										<Tooltip content="Создать карточку" placement="top">
+											<button
+												type="button"
+												on:click|preventDefault={() => (actionType = 'ingest')}
+												class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden {actionType ===
+												'ingest'
+													? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
+													: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}"
+												aria-label="Создать карточку"
+												aria-pressed={actionType === 'ingest'}
+											>
+												<Document className="size-4" strokeWidth="1.75" />
+												<span class="text-xs hidden sm:inline">Создать карточку</span>
+											</button>
+										</Tooltip>
+										<Tooltip content="Поиск аналогов" placement="top">
+											<button
+												type="button"
+												on:click|preventDefault={() => (actionType = 'search')}
+												class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden {actionType ===
+												'search'
+													? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
+													: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}"
+												aria-label="Поиск аналогов"
+												aria-pressed={actionType === 'search'}
+											>
+												<Search className="size-4" strokeWidth="1.75" />
+												<span class="text-xs hidden sm:inline">Поиск аналогов</span>
+											</button>
+										</Tooltip>
+									</div>
+
+									{#if actionType === 'ingest' || actionType === 'search'}
+										<div
+											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
+										/>
+									{/if}
+
 									<InputMenu
 										bind:files
 										selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
@@ -1436,7 +1483,8 @@
 										</div>
 									</InputMenu>
 
-									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || (toggleFilters && toggleFilters.length > 0)}
+									<!-- ЗАКОММЕНТИРОВАНО: Кнопка интеграции отключена -->
+									<!-- {#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || (toggleFilters && toggleFilters.length > 0)}
 										<div
 											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
 										/>
@@ -1474,13 +1522,12 @@
 												<Component className="size-4.5" strokeWidth="1.5" />
 											</div>
 										</IntegrationsMenu>
-									{/if}
+									{/if} -->
 
 									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
 										<div class="ml-1 flex gap-1.5">
 											<Tooltip content={$i18n.t('Valves')} placement="top">
 												<button
-													type="button"
 													id="model-valves-button"
 													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
 													on:click={() => {
@@ -1695,95 +1742,100 @@
 												</button>
 											</Tooltip>
 										</div>
-									{:else if prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
-										<div class=" flex items-center">
-											<!-- {$i18n.t('Call')} -->
-											<Tooltip content={$i18n.t('Voice mode')}>
-												<button
-													class=" bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full p-1.5 self-center"
-													type="button"
-													on:click={async () => {
-														if (selectedModels.length > 1) {
-															toast.error($i18n.t('Select only one model to call'));
-
-															return;
-														}
-
-														if ($config.audio.stt.engine === 'web') {
-															toast.error(
-																$i18n.t('Call feature is not supported when using Web STT engine')
-															);
-
-															return;
-														}
-														// check if user has access to getUserMedia
-														try {
-															let stream = await navigator.mediaDevices.getUserMedia({
-																audio: true
-															});
-															// If the user grants the permission, proceed to show the call overlay
-
-															if (stream) {
-																const tracks = stream.getTracks();
-																tracks.forEach((track) => track.stop());
-															}
-
-															stream = null;
-
-															if ($settings.audio?.tts?.engine === 'browser-kokoro') {
-																// If the user has not initialized the TTS worker, initialize it
-																if (!$TTSWorker) {
-																	await TTSWorker.set(
-																		new KokoroWorker({
-																			dtype: $settings.audio?.tts?.engineConfig?.dtype ?? 'fp32'
-																		})
-																	);
-
-																	await $TTSWorker.init();
-																}
-															}
-
-															showCallOverlay.set(true);
-															showControls.set(true);
-														} catch (err) {
-															// If the user denies the permission or an error occurs, show an error message
-															toast.error(
-																$i18n.t('Permission denied when accessing media devices')
-															);
-														}
-													}}
-													aria-label={$i18n.t('Voice mode')}
-												>
-													<Voice className="size-5" strokeWidth="2.5" />
-												</button>
-											</Tooltip>
-										</div>
 									{:else}
+										<!-- ЗАКОММЕНТИРОВАНО: Режим голоса отключен -->
+										<!-- {#if prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
+											<div class=" flex items-center">
+												<Tooltip content={$i18n.t('Voice mode')}>
+													<button
+														class=" bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full p-1.5 self-center"
+														type="button"
+														on:click={async () => {
+															if (selectedModels.length > 1) {
+																toast.error($i18n.t('Select only one model to call'));
+
+																return;
+															}
+
+															if ($config.audio.stt.engine === 'web') {
+																toast.error(
+																	$i18n.t('Call feature is not supported when using Web STT engine')
+																);
+
+																return;
+															}
+															// check if user has access to getUserMedia
+															try {
+																let stream = await navigator.mediaDevices.getUserMedia({
+																	audio: true
+																});
+																// If the user grants the permission, proceed to show the call overlay
+
+																if (stream) {
+																	const tracks = stream.getTracks();
+																	tracks.forEach((track) => track.stop());
+																}
+
+																stream = null;
+
+																if ($settings.audio?.tts?.engine === 'browser-kokoro') {
+																	// If the user has not initialized the TTS worker, initialize it
+																	if (!$TTSWorker) {
+																		await TTSWorker.set(
+																			new KokoroWorker({
+																				dtype: $settings.audio?.tts?.engineConfig?.dtype ?? 'fp32'
+																			})
+																		);
+
+																		await $TTSWorker.init();
+																	}
+																}
+
+																showCallOverlay.set(true);
+																showControls.set(true);
+															} catch (err) {
+																// If the user denies the permission or an error occurs, show an error message
+																toast.error(
+																	$i18n.t('Permission denied when accessing media devices')
+																);
+															}
+														}}
+														aria-label={$i18n.t('Voice mode')}
+													>
+														<Voice className="size-5" strokeWidth="2.5" />
+													</button>
+												</Tooltip>
+											</div>
+										{:else} -->
 										<div class=" flex items-center">
 											<Tooltip content={$i18n.t('Send message')}>
 												<button
 													id="send-message-button"
 													class="{!(prompt === '' && files.length === 0)
 														? 'bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 '
-														: 'text-white bg-gray-200 dark:text-gray-900 dark:bg-gray-700 disabled'} transition rounded-full p-1.5 self-center"
+														: 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400'} transition rounded-full p-1.5 self-center"
 													type="submit"
-													disabled={prompt === '' && files.length === 0}
 												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 16 16"
-														fill="currentColor"
-														class="size-5"
-													>
-														<path
-															fill-rule="evenodd"
-															d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
-															clip-rule="evenodd"
-														/>
-													</svg>
+													{#if !(prompt === '' && files.length === 0)}
+														<ArrowRight className="size-5" strokeWidth="2" />
+													{:else}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+															class="size-5"
+														>
+															<path
+																fill-rule="evenodd"
+																d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z"
+																clip-rule="evenodd"
+															/>
+														</svg>
+													{/if}
 												</button>
 											</Tooltip>
 										</div>
+										<!-- {/if} -->
 									{/if}
 								</div>
 							</div>

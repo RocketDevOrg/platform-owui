@@ -28,6 +28,7 @@
 	import MessageInput from './MessageInput.svelte';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
+	import ProfileImage from './Messages/ProfileImage.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -120,11 +121,10 @@
 											selectedModelIdx = modelIdx;
 										}}
 									>
-										<img
-											src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
-											class=" size-9 @sm:size-10 rounded-full border-[1px] border-gray-100 dark:border-none"
-											aria-hidden="true"
-											draggable="false"
+										<ProfileImage
+											src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id || selectedModels[modelIdx]}&lang=${$i18n.language}`}
+											className="size-9 @sm:size-10 rounded-full border-[1px] border-gray-100 dark:border-none"
+											modelId={model?.id || selectedModels[modelIdx]}
 										/>
 									</button>
 								</Tooltip>
@@ -235,7 +235,8 @@
 			<FolderPlaceholder folder={$selectedFolder} />
 		</div>
 	{:else}
-		<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
+		<!-- ЗАКОММЕНТИРОВАНО: Секция предложений отключена -->
+		<!-- <div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
 			<div class="mx-5">
 				<Suggestions
 					suggestionPrompts={atSelectedModel?.info?.meta?.suggestion_prompts ??
@@ -246,6 +247,6 @@
 					{onSelect}
 				/>
 			</div>
-		</div>
+		</div> -->
 	{/if}
 </div>

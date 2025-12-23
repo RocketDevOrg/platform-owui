@@ -139,6 +139,7 @@
 		>
 			{#if tab === ''}
 				<div in:fly={{ x: -20, duration: 150 }}>
+					<!-- ЗАКОММЕНТИРОВАНО: Оставлена только загрузка файлов, остальные опции отключены -->
 					<Tooltip
 						content={fileUploadCapableModels.length !== selectedModels.length
 							? $i18n.t('Model(s) do not support file upload')
@@ -163,7 +164,8 @@
 						</DropdownMenu.Item>
 					</Tooltip>
 
-					<Tooltip
+					<!-- ЗАКОММЕНТИРОВАНО: Capture (скриншот/камера) -->
+					<!-- <Tooltip
 						content={fileUploadCapableModels.length !== selectedModels.length
 							? $i18n.t('Model(s) do not support file upload')
 							: !fileUploadEnabled
@@ -192,9 +194,10 @@
 							<Camera />
 							<div class=" line-clamp-1">{$i18n.t('Capture')}</div>
 						</DropdownMenu.Item>
-					</Tooltip>
+					</Tooltip> -->
 
-					<Tooltip
+					<!-- ЗАКОММЕНТИРОВАНО: Attach Webpage -->
+					<!-- <Tooltip
 						content={fileUploadCapableModels.length !== selectedModels.length
 							? $i18n.t('Model(s) do not support file upload')
 							: !fileUploadEnabled
@@ -215,9 +218,10 @@
 							<GlobeAlt />
 							<div class="line-clamp-1">{$i18n.t('Attach Webpage')}</div>
 						</DropdownMenu.Item>
-					</Tooltip>
+					</Tooltip> -->
 
-					{#if $config?.features?.enable_notes ?? false}
+					<!-- ЗАКОММЕНТИРОВАНО: Attach Notes -->
+					<!-- {#if $config?.features?.enable_notes ?? false}
 						<Tooltip
 							content={fileUploadCapableModels.length !== selectedModels.length
 								? $i18n.t('Model(s) do not support file upload')
@@ -247,9 +251,10 @@
 								</div>
 							</button>
 						</Tooltip>
-					{/if}
+					{/if} -->
 
-					{#if ($knowledge ?? []).length > 0}
+					<!-- ЗАКОММЕНТИРОВАНО: Attach Knowledge -->
+					<!-- {#if ($knowledge ?? []).length > 0}
 						<Tooltip
 							content={fileUploadCapableModels.length !== selectedModels.length
 								? $i18n.t('Model(s) do not support file upload')
@@ -279,9 +284,10 @@
 								</div>
 							</button>
 						</Tooltip>
-					{/if}
+					{/if} -->
 
-					{#if ($chats ?? []).length > 0}
+					<!-- ЗАКОММЕНТИРОВАНО: Reference Chats -->
+					<!-- {#if ($chats ?? []).length > 0}
 						<Tooltip
 							content={fileUploadCapableModels.length !== selectedModels.length
 								? $i18n.t('Model(s) do not support file upload')
@@ -311,9 +317,10 @@
 								</div>
 							</button>
 						</Tooltip>
-					{/if}
+					{/if} -->
 
-					{#if fileUploadEnabled}
+					<!-- ЗАКОММЕНТИРОВАНО: Google Drive и OneDrive интеграции -->
+					<!-- {#if fileUploadEnabled}
 						{#if $config?.features?.enable_google_drive_integration}
 							<DropdownMenu.Item
 								class="flex gap-2 items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl"
@@ -457,9 +464,11 @@
 								</div>
 							</button>
 						{/if}
-					{/if}
+					{/if} -->
 				</div>
-			{:else if tab === 'knowledge'}
+			{/if}
+			<!-- ЗАКОММЕНТИРОВАНО: Вкладки для отключенных опций (knowledge, notes, chats, microsoft_onedrive) -->
+			<!-- {:else if tab === 'knowledge'}
 				<div in:fly={{ x: 20, duration: 150 }}>
 					<button
 						class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
@@ -562,7 +571,7 @@
 						</DropdownMenu.Item>
 					{/if}
 				</div>
-			{/if}
+			{/if} -->
 		</DropdownMenu.Content>
 	</div>
 </Dropdown>

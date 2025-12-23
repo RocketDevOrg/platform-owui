@@ -159,6 +159,24 @@
 
 	let model = null;
 	$: model = $models.find((m) => m.id === message.model);
+	// ИЗМЕНЕНО: Если модель не найдена и это fastapi, создаем фиктивную модель
+	$: if (!model && (message.model === 'fastapi' || message.modelName === 'Помощник')) {
+		model = {
+			id: 'fastapi',
+			name: 'Помощник',
+			info: {
+				params: {
+					stream_response: true
+				},
+				meta: {
+					capabilities: {
+						vision: true,
+						usage: false
+					}
+				}
+			}
+		} as any;
+	}
 
 	let edit = false;
 	let editedContent = '';
@@ -628,6 +646,7 @@
 			<ProfileImage
 				src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
 				className={'size-8 assistant-message-profile-image'}
+				modelId={model?.id}
 			/>
 		</div>
 

@@ -132,6 +132,12 @@ if WEBSOCKET_MANAGER == "redis":
         redis_sentinels=redis_sentinels,
         redis_cluster=WEBSOCKET_REDIS_CLUSTER,
     )
+    USER_POOL = RedisDict(
+        f"{REDIS_KEY_PREFIX}:user_pool",
+        redis_url=WEBSOCKET_REDIS_URL,
+        redis_sentinels=redis_sentinels,
+        redis_cluster=WEBSOCKET_REDIS_CLUSTER,
+    )
     USAGE_POOL = RedisDict(
         f"{REDIS_KEY_PREFIX}:usage_pool",
         redis_url=WEBSOCKET_REDIS_URL,
@@ -153,6 +159,7 @@ else:
     MODELS = {}
 
     SESSION_POOL = {}
+    USER_POOL = {}
     USAGE_POOL = {}
 
     aquire_func = release_func = renew_func = lambda: True
@@ -226,6 +233,11 @@ def get_models_in_use():
     # List models that are currently in use
     models_in_use = list(USAGE_POOL.keys())
     return models_in_use
+
+
+def get_active_user_ids():
+    """Get the list of active user IDs."""
+    return list(USER_POOL.keys())
 
 
 def get_user_id_from_session_pool(sid):

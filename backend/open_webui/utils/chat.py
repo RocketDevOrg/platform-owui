@@ -1,6 +1,7 @@
 import time
 import logging
 import sys
+import os
 
 from aiocache import cached
 from typing import Any, Optional
@@ -9,8 +10,9 @@ import json
 import inspect
 import uuid
 import asyncio
+import aiohttp
 
-from fastapi import Request, status
+from fastapi import Request, status, HTTPException
 from starlette.responses import Response, StreamingResponse, JSONResponse
 
 
@@ -55,12 +57,132 @@ from open_webui.utils.filter import (
     process_filter_functions,
 )
 
-from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL, BYPASS_MODEL_ACCESS_CONTROL
+from open_webui.env import (
+    SRC_LOG_LEVELS,
+    GLOBAL_LOG_LEVEL,
+    BYPASS_MODEL_ACCESS_CONTROL,
+    FASTAPI_CHAT_URL,
+    USE_FASTAPI_FOR_CHAT,
+)
 
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
+
+# Таймаут для HTTP запросов к FastAPI
+AIOHTTP_CLIENT_TIMEOUT = aiohttp.ClientTimeout(total=300)  # 5 минут
+
+
+async def generate_fastapi_chat_completion(
+    request: Request,
+    form_data: dict,
+    user: Any,
+):
+    """
+    Вызывает FastAPI эндпоинт для генерации ответа чата
+    Вместо стандартных LLM API (OpenAI/Ollama) все запросы идут в FastAPI
+    """
+    log.debug(f"generate_fastapi_chat_completion: calling FastAPI at {FASTAPI_CHAT_URL}")
+    
+    metadata = form_data.get("metadata", {})
+    stream = form_data.get("stream", False)
+    
+    # Подготовка payload для FastAPI (в формате OpenAI API)
+    payload = {
+        "messages": form_data.get("messages", []),
+        "model": form_data.get("model", ""),
+        "stream": stream,
+    }
+    
+    # Добавляем дополнительные параметры, если есть
+    if "params" in form_data:
+        payload["params"] = form_data["params"]
+    
+    # Добавляем метаданные для контекста
+    if metadata:
+        payload["metadata"] = {
+            "user_id": metadata.get("user_id"),
+            "chat_id": metadata.get("chat_id"),
+            "message_id": metadata.get("message_id"),
+            "session_id": metadata.get("session_id"),
+        }
+    
+    headers = {
+        "Content-Type": "application/json",
+    }
+    
+    # Прокидываем токен авторизации, если есть
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        headers["authorization"] = auth_header
+    
+    try:
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            timeout=AIOHTTP_CLIENT_TIMEOUT
+        ) as session:
+            async with session.post(
+                FASTAPI_CHAT_URL,
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status >= 400:
+                    try:
+                        error_data = await response.json()
+                        error_text = error_data.get("detail", await response.text())
+                    except:
+                        error_text = await response.text()
+                    
+                    log.error(f"FastAPI error {response.status}: {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"FastAPI error: {error_text}"
+                    )
+                
+                if stream:
+                    # Streaming ответ (SSE формат)
+                    async def stream_generator():
+                        async for line in response.content:
+                            if line:
+                                try:
+                                    line_str = line.decode('utf-8').strip()
+                                    if line_str:
+                                        # Если строка уже в формате SSE, возвращаем как есть
+                                        if line_str.startswith('data: '):
+                                            yield f"{line_str}\n\n"
+                                        elif line_str == "[DONE]":
+                                            yield f"data: [DONE]\n\n"
+                                        else:
+                                            # Обертываем в формат SSE
+                                            yield f"data: {line_str}\n\n"
+                                except Exception as e:
+                                    log.debug(f"Error parsing stream line: {e}")
+                                    continue
+                    
+                    return StreamingResponse(
+                        stream_generator(),
+                        media_type="text/event-stream"
+                    )
+                else:
+                    # Non-streaming ответ
+                    response_data = await response.json()
+                    return response_data
+                    
+    except aiohttp.ClientError as e:
+        log.error(f"FastAPI connection error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to connect to FastAPI: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"FastAPI error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"FastAPI error: {str(e)}"
+        )
 
 
 async def generate_direct_chat_completion(
@@ -181,110 +303,133 @@ async def generate_chat_completion(
                 **request.state.metadata,
             }
 
-    if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
-        models = {
-            request.state.model["id"]: request.state.model,
-        }
-        log.debug(f"direct connection to model: {models}")
-    else:
-        models = request.app.state.MODELS
+    # ВСЕГДА используем FastAPI для генерации ответов чата
+    # Убрана опция выбора модели - все запросы идут напрямую в FastAPI
+    log.debug("Using FastAPI for chat completion (always enabled)")
+    return await generate_fastapi_chat_completion(
+        request=request,
+        form_data=form_data,
+        user=user,
+    )
 
-    model_id = form_data["model"]
-    if model_id not in models:
-        raise Exception("Model not found")
-
-    model = models[model_id]
-
-    if getattr(request.state, "direct", False):
-        return await generate_direct_chat_completion(
-            request, form_data, user=user, models=models
-        )
-    else:
-        # Check if user has access to the model
-        if not bypass_filter and user.role == "user":
-            try:
-                check_model_access(user, model)
-            except Exception as e:
-                raise e
-
-        if model.get("owned_by") == "arena":
-            model_ids = model.get("info", {}).get("meta", {}).get("model_ids")
-            filter_mode = model.get("info", {}).get("meta", {}).get("filter_mode")
-            if model_ids and filter_mode == "exclude":
-                model_ids = [
-                    model["id"]
-                    for model in list(request.app.state.MODELS.values())
-                    if model.get("owned_by") != "arena" and model["id"] not in model_ids
-                ]
-
-            selected_model_id = None
-            if isinstance(model_ids, list) and model_ids:
-                selected_model_id = random.choice(model_ids)
-            else:
-                model_ids = [
-                    model["id"]
-                    for model in list(request.app.state.MODELS.values())
-                    if model.get("owned_by") != "arena"
-                ]
-                selected_model_id = random.choice(model_ids)
-
-            form_data["model"] = selected_model_id
-
-            if form_data.get("stream") == True:
-
-                async def stream_wrapper(stream):
-                    yield f"data: {json.dumps({'selected_model_id': selected_model_id})}\n\n"
-                    async for chunk in stream:
-                        yield chunk
-
-                response = await generate_chat_completion(
-                    request, form_data, user, bypass_filter=True
-                )
-                return StreamingResponse(
-                    stream_wrapper(response.body_iterator),
-                    media_type="text/event-stream",
-                    background=response.background,
-                )
-            else:
-                return {
-                    **(
-                        await generate_chat_completion(
-                            request, form_data, user, bypass_filter=True
-                        )
-                    ),
-                    "selected_model_id": selected_model_id,
-                }
-
-        if model.get("pipe"):
-            # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter
-            return await generate_function_chat_completion(
-                request, form_data, user=user, models=models
-            )
-        if model.get("owned_by") == "ollama":
-            # Using /ollama/api/chat endpoint
-            form_data = convert_payload_openai_to_ollama(form_data)
-            response = await generate_ollama_chat_completion(
-                request=request,
-                form_data=form_data,
-                user=user,
-                bypass_filter=bypass_filter,
-            )
-            if form_data.get("stream"):
-                response.headers["content-type"] = "text/event-stream"
-                return StreamingResponse(
-                    convert_streaming_response_ollama_to_openai(response),
-                    headers=dict(response.headers),
-                    background=response.background,
-                )
-            else:
-                return convert_response_ollama_to_openai(response)
-        else:
-            return await generate_openai_chat_completion(
-                request=request,
-                form_data=form_data,
-                user=user,
-                bypass_filter=bypass_filter,
-            )
+    # ============================================================
+    # ЗАКОММЕНТИРОВАНО: Стандартная логика работы с моделями
+    # Раскомментировать для восстановления функциональности выбора моделей
+    # ============================================================
+    # # Если включено использование FastAPI для чата, перенаправляем все запросы туда
+    # if USE_FASTAPI_FOR_CHAT:
+    #     log.debug("Using FastAPI for chat completion")
+    #     return await generate_fastapi_chat_completion(
+    #         request=request,
+    #         form_data=form_data,
+    #         user=user,
+    #     )
+    #
+    # # Стандартная логика для работы с моделями (если FastAPI отключен)
+    # if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
+    #     models = {
+    #         request.state.model["id"]: request.state.model,
+    #     }
+    #     log.debug(f"direct connection to model: {models}")
+    # else:
+    #     models = request.app.state.MODELS
+    #
+    # model_id = form_data["model"]
+    # if model_id not in models:
+    #     raise Exception("Model not found")
+    #
+    # model = models[model_id]
+    #
+    # if getattr(request.state, "direct", False):
+    #     return await generate_direct_chat_completion(
+    #         request, form_data, user=user, models=models
+    #     )
+    # else:
+    #     # Check if user has access to the model
+    #     if not bypass_filter and user.role == "user":
+    #         try:
+    #             check_model_access(user, model)
+    #         except Exception as e:
+    #             raise e
+    #
+    #     if model.get("owned_by") == "arena":
+    #         model_ids = model.get("info", {}).get("meta", {}).get("model_ids")
+    #         filter_mode = model.get("info", {}).get("meta", {}).get("filter_mode")
+    #         if model_ids and filter_mode == "exclude":
+    #             model_ids = [
+    #                 model["id"]
+    #                 for model in list(request.app.state.MODELS.values())
+    #                 if model.get("owned_by") != "arena" and model["id"] not in model_ids
+    #             ]
+    #
+    #         selected_model_id = None
+    #         if isinstance(model_ids, list) and model_ids:
+    #             selected_model_id = random.choice(model_ids)
+    #         else:
+    #             model_ids = [
+    #                 model["id"]
+    #                 for model in list(request.app.state.MODELS.values())
+    #                 if model.get("owned_by") != "arena"
+    #             ]
+    #             selected_model_id = random.choice(model_ids)
+    #
+    #         form_data["model"] = selected_model_id
+    #
+    #         if form_data.get("stream") == True:
+    #
+    #             async def stream_wrapper(stream):
+    #                 yield f"data: {json.dumps({'selected_model_id': selected_model_id})}\n\n"
+    #                 async for chunk in stream:
+    #                     yield chunk
+    #
+    #             response = await generate_chat_completion(
+    #                 request, form_data, user, bypass_filter=True
+    #             )
+    #             return StreamingResponse(
+    #                 stream_wrapper(response.body_iterator),
+    #                 media_type="text/event-stream",
+    #                 background=response.background,
+    #             )
+    #         else:
+    #             return {
+    #                 **(
+    #                     await generate_chat_completion(
+    #                         request, form_data, user, bypass_filter=True
+    #                     )
+    #                 ),
+    #                 "selected_model_id": selected_model_id,
+    #             }
+    #
+    #     if model.get("pipe"):
+    #         # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter
+    #         return await generate_function_chat_completion(
+    #             request, form_data, user=user, models=models
+    #         )
+    #     if model.get("owned_by") == "ollama":
+    #         # Using /ollama/api/chat endpoint
+    #         form_data = convert_payload_openai_to_ollama(form_data)
+    #         response = await generate_ollama_chat_completion(
+    #             request=request,
+    #             form_data=form_data,
+    #             user=user,
+    #             bypass_filter=bypass_filter,
+    #         )
+    #         if form_data.get("stream"):
+    #             response.headers["content-type"] = "text/event-stream"
+    #             return StreamingResponse(
+    #                 convert_streaming_response_ollama_to_openai(response),
+    #                 headers=dict(response.headers),
+    #                 background=response.background,
+    #             )
+    #         else:
+    #             return convert_response_ollama_to_openai(response)
+    #     else:
+    #         return await generate_openai_chat_completion(
+    #             request=request,
+    #             form_data=form_data,
+    #             user=user,
+    #             bypass_filter=bypass_filter,
+    #         )
 
 
 chat_completion = generate_chat_completion
