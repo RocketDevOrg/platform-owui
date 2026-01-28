@@ -214,6 +214,120 @@ export const ingestFile = async (
 };
 
 /**
+ * Создает черновик карточки товара по тексту и файлу (если есть)
+ * Отправляет FormData с текстом и файлом на эндпоинт /ingest
+ * 
+ * МОК: Если USE_MOCK_DATA = true, возвращает мок-данные
+ */
+export const ingestWithFormData = async (
+	token: string,
+	text: string,
+	file?: File
+): Promise<IngestResponse> => {
+	// МОК: Возвращаем мок-данные если флаг включен
+	if (USE_MOCK_DATA) {
+		console.log('[MOCK] ingestWithFormData:', { text: text.substring(0, 50), file: file?.name });
+		if (file) {
+			return await mockIngestFileResponse(file.name);
+		} else {
+			return await mockIngestTextResponse(text);
+		}
+	}
+
+	// Реальный API-вызов
+	let error = null;
+
+	const formData = new FormData();
+	
+	if (file) {
+		formData.append('source_type', 'file');
+		formData.append('file', file);
+		// Если есть текст, добавляем его тоже
+		if (text && text.trim()) {
+			formData.append('text', text);
+		}
+	} else {
+		formData.append('source_type', 'text');
+		formData.append('text', text);
+	}
+
+	const res = await fetch(`${FASTAPI_BASE_URL}/ingest`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: formData
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error ingesting with form data:', err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+/**
+ * Поиск аналогов по тексту и файлу (если есть)
+ * Отправляет FormData с текстом и файлом на эндпоинт /search/analogs
+ * 
+ * МОК: Если USE_MOCK_DATA = true, возвращает мок-данные
+ */
+export const searchAnalogsWithFormData = async (
+	token: string,
+	text: string,
+	file?: File
+): Promise<SearchAnalogsResponse> => {
+	// МОК: Возвращаем мок-данные если флаг включен
+	if (USE_MOCK_DATA) {
+		console.log('[MOCK] searchAnalogsWithFormData:', { text: text.substring(0, 50), file: file?.name });
+		return await mockSearchAnalogsResponse();
+	}
+
+	// Реальный API-вызов
+	let error = null;
+
+	const formData = new FormData();
+	formData.append('query', text);
+	if (file) {
+		formData.append('file', file);
+	}
+
+	const res = await fetch(`${FASTAPI_BASE_URL}/search/analogs`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: formData
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error searching analogs with form data:', err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+/**
  * Получает черновик по ID
  * 
  * МОК: Если USE_MOCK_DATA = true, возвращает мок-данные

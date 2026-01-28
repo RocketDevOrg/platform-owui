@@ -46,6 +46,7 @@
 	import { deleteFileById } from '$lib/apis/files';
 	import { getSessionUser } from '$lib/apis/auths';
 	import { getTools } from '$lib/apis/tools';
+	import { ingestFile } from '$lib/apis/severnaya';
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
 
@@ -560,6 +561,17 @@
 		}
 
 		files = [...files, fileItem];
+
+		// ИЗМЕНЕНО: Если выбрано действие "Создать карточку" или "Поиск аналогов", 
+		// просто сохраняем файл в массиве как File объект
+		// Файл будет отправлен в FastAPI только при нажатии "Отправить сообщение" вместе с текстом
+		if (actionType === 'ingest' || actionType === 'search') {
+			fileItem.status = 'ready'; // Готов к отправке
+			fileItem.file = file; // Сохраняем оригинальный File объект для отправки
+			files = files;
+			console.log(`File added to form data (will be sent on submit for ${actionType}):`, file.name);
+			return;
+		}
 
 		if (!$temporaryChatEnabled) {
 			try {

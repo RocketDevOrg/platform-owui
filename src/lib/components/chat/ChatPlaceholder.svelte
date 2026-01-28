@@ -64,7 +64,8 @@
 			</div>
 		</div>
 
-		{#if $temporaryChatEnabled}
+		<!-- ЗАКОММЕНТИРОВАНО: Текст "Temporary Chat" отключен -->
+		{#if false && $temporaryChatEnabled}
 			<Tooltip
 				content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
 				className="w-full flex justify-start mb-0.5"

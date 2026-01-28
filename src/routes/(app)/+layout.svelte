@@ -234,7 +234,8 @@
 					event.preventDefault();
 					showSettings.set(false);
 					showShortcuts.set(false);
-				} else if (isShortcutMatch(event, shortcuts[Shortcut.NEW_TEMPORARY_CHAT])) {
+				} else if (false && isShortcutMatch(event, shortcuts[Shortcut.NEW_TEMPORARY_CHAT])) {
+					// ЗАКОММЕНТИРОВАНО: Shortcut для временного чата отключен
 					console.log('Shortcut triggered: NEW_TEMPORARY_CHAT');
 					event.preventDefault();
 					if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
@@ -264,7 +265,8 @@
 		// 	showChangelog.set($settings?.version !== $config.version);
 		// }
 
-		if ($user?.role === 'admin' || ($user?.permissions?.chat?.temporary ?? true)) {
+		// ЗАКОММЕНТИРОВАНО: Инициализация временного чата отключена
+		if (false && ($user?.role === 'admin' || ($user?.permissions?.chat?.temporary ?? true))) {
 			if ($page.url.searchParams.get('temporary-chat') === 'true') {
 				temporaryChatEnabled.set(true);
 			}
@@ -306,7 +308,8 @@
 <SettingsModal bind:show={$showSettings} />
 <ChangelogModal bind:show={$showChangelog} />
 
-{#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true)}
+<!-- ЗАКОММЕНТИРОВАНО: Уведомление об обновлении версии -->
+{#if false && version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true)}
 	<div class=" absolute bottom-8 right-8 z-50" in:fade={{ duration: 100 }}>
 		<UpdateInfoToast
 			{version}

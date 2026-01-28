@@ -909,11 +909,12 @@
 
 	const initNewChat = async () => {
 		console.log('initNewChat');
-		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
+		// ЗАКОММЕНТИРОВАНО: Логика временного чата отключена
+		if (false && $user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
 			await temporaryChatEnabled.set(true);
 		}
 
-		if ($settings?.temporaryChatByDefault ?? false) {
+		if (false && ($settings?.temporaryChatByDefault ?? false)) {
 			if ($temporaryChatEnabled === false) {
 				await temporaryChatEnabled.set(true);
 			} else if ($temporaryChatEnabled === null) {
@@ -1671,7 +1672,8 @@
 		prompt = '';
 
 		const messages = createMessagesList(history, history.currentId);
-		const _files = JSON.parse(JSON.stringify(files));
+		// Копируем файлы с сохранением File объектов (JSON.parse не сохраняет File)
+		const _files = files.map((item) => ({ ...item }));
 
 		chatFiles.push(
 			..._files.filter((item) =>
@@ -2016,6 +2018,112 @@
 			}))
 			.filter((message) => message?.role === 'user' || message?.content?.trim());
 
+		// ИЗМЕНЕНО: Если выбрано действие "Создать карточку" или "Поиск аналогов", 
+		// отправляем FormData с текстом и файлом на соответствующие эндпоинты
+		if (actionType === 'ingest' || actionType === 'search') {
+			// Убираем префикс из текста, если он был добавлен
+			let userMessageContent = userMessage?.content || '';
+			if (actionType === 'ingest' && userMessageContent.startsWith('Создать карточку: ')) {
+				userMessageContent = userMessageContent.replace('Создать карточку: ', '');
+			} else if (actionType === 'search' && userMessageContent.startsWith('Поиск аналогов: ')) {
+				userMessageContent = userMessageContent.replace('Поиск аналогов: ', '');
+			}
+			
+			// Находим файл в сообщении пользователя (сохраняем оригинальный File объект)
+			const fileItem = userMessage?.files?.find((item) => item.type === 'file' && item.file instanceof File);
+			const file = fileItem?.file instanceof File ? fileItem.file : null;
+
+			try {
+				if (actionType === 'ingest') {
+					// Отправляем на эндпоинт /ingest
+					const { ingestWithFormData } = await import('$lib/apis/severnaya');
+					const response = await ingestWithFormData(localStorage.token, userMessageContent, file || undefined);
+					
+					if (response) {
+						console.log('Ingest successful:', response);
+						// Создаем ответное сообщение с виджетом черновика
+						const widgetData = {
+							type: 'widget',
+							widget_type: 'draft',
+							widget_data: {
+								draft: { id: response.draft_id },
+								meta: {
+									can_edit: true,
+									can_commit: true,
+									source_label: file ? 'Файл' : 'Текст',
+									created_at: new Date().toISOString()
+								}
+							}
+						};
+						
+						const widgetMarkdown = `\n\n\`\`\`widget\n${JSON.stringify(widgetData, null, 2)}\n\`\`\`\n\n`;
+						
+						// Создаем streaming ответ с виджетом
+						const stream = new ReadableStream({
+							async start(controller) {
+								const encoder = new TextEncoder();
+								controller.enqueue(
+									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Черновик карточки создан.\n\n' } }] })}\n\n`)
+								);
+								await new Promise(resolve => setTimeout(resolve, 300));
+								controller.enqueue(
+									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: widgetMarkdown } }] })}\n\n`)
+								);
+								await new Promise(resolve => setTimeout(resolve, 100));
+								controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+								controller.close();
+							}
+						});
+
+						return { ok: true, body: stream, task_id: null };
+					} else {
+						throw new Error('Failed to ingest');
+					}
+				} else if (actionType === 'search') {
+					// Отправляем на эндпоинт /search/analogs
+					const { searchAnalogsWithFormData } = await import('$lib/apis/severnaya');
+					const response = await searchAnalogsWithFormData(localStorage.token, userMessageContent, file || undefined);
+					
+					if (response) {
+						console.log('Search analogs successful:', response);
+						// Создаем ответное сообщение с результатами поиска
+						const resultsText = response.results.map((r, i) => 
+							`${i + 1}. ${r.name} (${r.match_type || 'analog'}, score: ${r.score})`
+						).join('\n');
+						
+						const stream = new ReadableStream({
+							async start(controller) {
+								const encoder = new TextEncoder();
+								const content = `Найдено аналогов: ${response.results.length}\n\n${resultsText}`;
+								const words = content.split(' ');
+								for (let i = 0; i < words.length; i++) {
+									await new Promise(resolve => setTimeout(resolve, 50));
+									const chunk = words[i] + (i < words.length - 1 ? ' ' : '');
+									controller.enqueue(
+										encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`)
+									);
+								}
+								await new Promise(resolve => setTimeout(resolve, 100));
+								controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+								controller.close();
+							}
+						});
+
+						return { ok: true, body: stream, task_id: null };
+					} else {
+						throw new Error('Failed to search analogs');
+					}
+				}
+			} catch (e) {
+				console.error('Error in action:', e);
+				toast.error(`${e}`);
+				responseMessage.error = { content: String(e) };
+				responseMessage.done = true;
+				history.messages[responseMessageId] = responseMessage;
+				return null;
+			}
+		}
+
 		const toolIds = [];
 		const toolServerIds = [];
 
@@ -2033,7 +2141,7 @@
 			}
 		}
 
-		// Прямое обращение к FastAPI, обходя бэкенд Open WebUI
+		// Прямое обращение к FastAPI, обходя бэкенд Open WebUI (стандартный чат)
 		const res = await generateFastAPIChatCompletion(
 			localStorage.token,
 			{
