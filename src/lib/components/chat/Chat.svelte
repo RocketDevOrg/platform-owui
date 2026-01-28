@@ -97,6 +97,7 @@
 	import Tooltip from '../common/Tooltip.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import Image from '../common/Image.svelte';
+	import OnboardingOverlay from '../severnaya/OnboardingOverlay.svelte';
 
 	export let chatIdProp = '';
 
@@ -2971,6 +2972,9 @@
 			</div>
 		</div>
 	{/if}
+
+	<!-- Onboarding Overlay для первой сессии -->
+	<OnboardingOverlay userId={$user?.id || null} />
 </div>
 
 <style>
