@@ -1,0 +1,162 @@
+name: Build, Push and Deploy
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.short_sha }}
+      environment: ${{ steps.vars.outputs.environment }}
+      container_name: ${{ steps.vars.outputs.container_name }}
+      vm_host: ${{ steps.vars.outputs.vm_host }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set variables
+        id: vars
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "container_name=openwebui" >> $GITHUB_OUTPUT
+            echo "vm_host=prod" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "container_name=openwebui-dev" >> $GITHUB_OUTPUT
+            echo "vm_host=dev" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build Docker image
+        run: |
+          IMAGE="registry.shared.internal/openwebui"
+          TAG="${{ steps.vars.outputs.short_sha }}-${{ steps.vars.outputs.environment }}"
+          docker build --no-cache -t $IMAGE:$TAG .
+          echo "Built: $IMAGE:$TAG"
+
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard
+      
+      - name: Setup WireGuard
+        run: |
+          echo "${{ secrets.WG_CONFIG }}" | sudo tee /etc/wireguard/wg0.conf
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+      
+      - name: Add registry to hosts
+        run: |
+          echo "10.8.0.1 registry.shared.internal" | sudo tee -a /etc/hosts
+      
+      - name: Trust registry certificate
+        run: |
+          echo "${{ secrets.REGISTRY_CERT }}" | sudo tee /usr/local/share/ca-certificates/registry.crt
+          sudo update-ca-certificates
+          sudo mkdir -p /etc/docker/certs.d/registry.shared.internal
+          echo "${{ secrets.REGISTRY_CERT }}" | sudo tee /etc/docker/certs.d/registry.shared.internal/ca.crt
+      
+      - name: Debug cert
+        run: |
+          echo "${{ secrets.REGISTRY_CERT }}" | openssl x509 -noout -subject -ext subjectAltName
+      
+      - name: Push Docker image
+        run: |
+          IMAGE="registry.shared.internal/openwebui"
+          TAG="${{ steps.vars.outputs.short_sha }}-${{ steps.vars.outputs.environment }}"
+          docker push $IMAGE:$TAG
+          echo "Pushed: $IMAGE:$TAG"
+      
+      - name: Cleanup WireGuard
+        if: always()
+        run: |
+          sudo wg-quick down wg0 || true
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard
+      
+      - name: Setup WireGuard
+        run: |
+          echo "${{ secrets.WG_CONFIG }}" | sudo tee /etc/wireguard/wg0.conf
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+      
+      - name: Deploy to VM via host
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 10.8.0.1
+          username: ${{ vars.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            
+            IMAGE="registry.shared.internal/openwebui:${{ needs.build-and-push.outputs.image_tag }}-${{ needs.build-and-push.outputs.environment }}"
+            CONTAINER_NAME="${{ needs.build-and-push.outputs.container_name }}"
+            VM_HOST="${{ needs.build-and-push.outputs.vm_host }}"
+            ENVIRONMENT="${{ needs.build-and-push.outputs.environment }}"
+            PORT=8003
+            
+            echo "Deploying $CONTAINER_NAME to VM: $VM_HOST (env: $ENVIRONMENT)"
+            
+            ssh -o StrictHostKeyChecking=no -i ~/.ssh/github_deploy ubuntu@${VM_HOST} "
+              set -e
+              
+              echo 'Pulling image on VM...'
+              docker pull $IMAGE
+              
+              echo 'Creating .env file...'
+              cat > /tmp/${CONTAINER_NAME}.env << 'EOF'
+            OLLAMA_BASE_URL=http://vllm.internal/v1/chat/completions
+            CORS_ALLOW_ORIGIN=*
+            FORWARDED_ALLOW_IPS=*
+            SCARF_NO_ANALYTICS=true
+            DO_NOT_TRACK=true
+            ANONYMIZED_TELEMETRY=false
+            FASTAPI_BASE_URL=http://localhost:8002/api/v1
+            USE_FASTAPI_FOR_CHAT=true
+            EOF
+              
+              echo 'Stopping old container...'
+              docker stop $CONTAINER_NAME || true
+              docker rm $CONTAINER_NAME || true
+              
+              echo 'Starting container on port ${PORT}...'
+              docker run -d \
+                --name $CONTAINER_NAME \
+                --restart unless-stopped \
+                -p 127.0.0.1:${PORT}:8080 \
+                --env-file /tmp/${CONTAINER_NAME}.env \
+                $IMAGE
+              
+              echo 'Waiting for container to be ready...'
+              for i in \$(seq 1 30); do
+                if docker ps | grep -q $CONTAINER_NAME; then
+                  echo 'Container is running!'
+                  break
+                fi
+                echo \"Attempt \$i/30 - waiting...\"
+                sleep 2
+              done
+              
+              echo 'Done! $CONTAINER_NAME running on port ${PORT}'
+            "
+            
+            echo "Deployment to $VM_HOST completed!"
+
+      - name: Cleanup WireGuard
+        if: always()
+        run: |
+          sudo wg-quick down wg0 || true
