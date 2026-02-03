@@ -13,7 +13,7 @@ import {
 } from './mock';
 
 // Базовый URL для FastAPI backend (можно переопределить через переменную окружения)
-const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_BASE_URL || 'http://localhost:8000/api/v1';
+const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_BASE_URL || 'http://10.23.1.13:80/api/v1';
 const FASTAPI_CHAT_URL = import.meta.env.VITE_FASTAPI_CHAT_URL || `${FASTAPI_BASE_URL}/chat/completions`;
 
 /**
@@ -54,8 +54,13 @@ export interface DraftCard {
 export interface IngestResponse {
 	draft_id: string;
 	status: string;
-	source_type: string;
-	source_payload: string;
+	job_id?: string;
+	source_type?: string;
+	source_payload?: string;
+	source?: {
+		type: string;
+		text_length?: number;
+	};
 }
 
 export interface SearchAnalogsResponse {
@@ -251,7 +256,8 @@ export const ingestWithFormData = async (
 		formData.append('text', text);
 	}
 
-	const res = await fetch(`${FASTAPI_BASE_URL}/ingest`, {
+	// Используем прокси-эндпоинт через бэкенд Open WebUI для обхода CORS
+	const res = await fetch(`${WEBUI_API_BASE_URL}/severnaya/ingest`, {
 		method: 'POST',
 		headers: {
 			Accept: 'application/json',
@@ -302,7 +308,8 @@ export const searchAnalogsWithFormData = async (
 		formData.append('file', file);
 	}
 
-	const res = await fetch(`${FASTAPI_BASE_URL}/search/analogs`, {
+	// Используем прокси-эндпоинт через бэкенд Open WebUI для обхода CORS
+	const res = await fetch(`${WEBUI_API_BASE_URL}/severnaya/search/analogs`, {
 		method: 'POST',
 		headers: {
 			Accept: 'application/json',
@@ -328,7 +335,8 @@ export const searchAnalogsWithFormData = async (
 };
 
 /**
- * Получает черновик по ID
+ * Получает черновик по ID через прокси бэкенда OWUI
+ * Используется для polling статуса черновика
  * 
  * МОК: Если USE_MOCK_DATA = true, возвращает мок-данные
  */
@@ -339,10 +347,10 @@ export const getDraft = async (token: string, draftId: string): Promise<DraftCar
 		return await mockGetDraftResponse(draftId);
 	}
 
-	// Реальный API-вызов
+	// Реальный API-вызов через прокси OWUI
 	let error = null;
 
-	const res = await fetch(`${FASTAPI_BASE_URL}/drafts/${draftId}`, {
+	const res = await fetch(`${WEBUI_API_BASE_URL}/severnaya/drafts/${draftId}`, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',

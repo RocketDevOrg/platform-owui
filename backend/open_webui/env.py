@@ -888,7 +888,7 @@ EXTERNAL_PWA_MANIFEST_URL = os.environ.get("EXTERNAL_PWA_MANIFEST_URL")
 ####################################
 
 # URL для FastAPI backend (для чата и работы с черновиками)
-FASTAPI_BASE_URL = os.environ.get("FASTAPI_BASE_URL", "http://localhost:8000/api/v1")
+FASTAPI_BASE_URL = os.environ.get("FASTAPI_BASE_URL", "http://10.23.1.13:80/api/v1")
 # URL для чата в FastAPI (если отличается от базового)
 FASTAPI_CHAT_URL = os.environ.get("FASTAPI_CHAT_URL", f"{FASTAPI_BASE_URL}/chat/completions")
 # Использовать FastAPI для всех запросов чата вместо стандартных LLM

@@ -834,33 +834,33 @@
 			editorProps: {
 				attributes: { id },
 				handlePaste: (view, event) => {
-					// Force plain-text pasting when richText === false
-					if (!richText) {
-						// swallow HTML completely
-						event.preventDefault();
-						const { state, dispatch } = view;
+					// Всегда вставляем только plain text без форматирования
+					// Это предотвращает сохранение размера шрифта и другого форматирования при вставке
+					if (event.clipboardData) {
+						const plainText = event.clipboardData.getData('text/plain');
+						if (plainText) {
+							event.preventDefault();
+							const { state, dispatch } = view;
 
-						const plainText = (event.clipboardData?.getData('text/plain') ?? '').replace(
-							/\r\n/g,
-							'\n'
-						);
+							const normalizedText = (plainText ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-						const lines = plainText.split('\n');
-						const nodes = [];
+							const lines = normalizedText.split('\n');
+							const nodes = [];
 
-						lines.forEach((line, index) => {
-							if (index > 0) {
-								nodes.push(state.schema.nodes.hardBreak.create());
-							}
-							if (line.length > 0) {
-								nodes.push(state.schema.text(line));
-							}
-						});
+							lines.forEach((line, index) => {
+								if (index > 0) {
+									nodes.push(state.schema.nodes.hardBreak.create());
+								}
+								if (line.length > 0) {
+									nodes.push(state.schema.text(line));
+								}
+							});
 
-						const fragment = Fragment.fromArray(nodes);
-						dispatch(state.tr.replaceSelectionWith(fragment, false).scrollIntoView());
+							const fragment = Fragment.fromArray(nodes);
+							dispatch(state.tr.replaceSelectionWith(fragment, false).scrollIntoView());
 
-						return true; // handled
+							return true; // handled
+						}
 					}
 
 					return false;
@@ -982,45 +982,30 @@
 									return true;
 								}
 
-								// Workaround for mobile WebViews that strip line breaks when pasting from
-								// clipboard suggestions (e.g., Gboard clipboard history).
-								const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(
-									navigator.userAgent
-								);
-								const isWebView =
-									typeof window !== 'undefined' &&
-									(/wv/i.test(navigator.userAgent) || // Standard Android WebView flag
-										(navigator.userAgent.includes('Android') &&
-											!navigator.userAgent.includes('Chrome')) || // Other generic Android WebViews
-										(navigator.userAgent.includes('Safari') &&
-											!navigator.userAgent.includes('Version'))); // iOS WebView (in-app browsers)
+								// Всегда вставляем только plain text без форматирования
+								// Это предотвращает сохранение размера шрифта и другого форматирования при вставке
+								event.preventDefault();
+								const { state, dispatch } = view;
+								const { from, to } = state.selection;
 
-								if (isMobile && isWebView && plainText.includes('\n')) {
-									// Manually deconstruct the pasted text and insert it with hard breaks
-									// to preserve the multi-line formatting.
-									const { state, dispatch } = view;
-									const { from, to } = state.selection;
+								// Очищаем текст от лишних символов и нормализуем переносы строк
+								const normalizedText = plainText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+								const lines = normalizedText.split('\n');
+								const nodes = [];
 
-									const lines = plainText.split('\n');
-									const nodes = [];
+								lines.forEach((line, index) => {
+									if (index > 0) {
+										nodes.push(state.schema.nodes.hardBreak.create());
+									}
+									if (line.length > 0) {
+										nodes.push(state.schema.text(line));
+									}
+								});
 
-									lines.forEach((line, index) => {
-										if (index > 0) {
-											nodes.push(state.schema.nodes.hardBreak.create());
-										}
-										if (line.length > 0) {
-											nodes.push(state.schema.text(line));
-										}
-									});
-
-									const fragment = Fragment.fromArray(nodes);
-									const tr = state.tr.replaceWith(from, to, fragment);
-									dispatch(tr.scrollIntoView());
-									event.preventDefault();
-									return true;
-								}
-								// Let ProseMirror handle normal text paste in non-problematic environments.
-								return false;
+								const fragment = Fragment.fromArray(nodes);
+								const tr = state.tr.replaceWith(from, to, fragment);
+								dispatch(tr.scrollIntoView());
+								return true;
 							}
 
 							// Delegate image paste handling to the parent component.

@@ -12,12 +12,17 @@
 	export let type: string = '';
 	export let brand: string = '';
 	export let article: string = '';
+	export let status: string = ''; // Статус черновика: new, processing, ready_for_review, synced, error
+	export let isProcessing: boolean = false; // Флаг для отображения loading состояния
 	export let onGenerateTitle: (() => void) | null = null;
 	export let onSave: (() => void) | null = null;
 	export let onSendTo1C: (() => void) | null = null;
 	export let loadingSave: boolean = false;
 	export let loadingSendTo1C: boolean = false;
 	export let loadingGenerateTitle: boolean = false;
+	
+	// Определяем, нужно ли показывать loading состояние
+	$: showLoading = isProcessing || status === 'new' || status === 'processing';
 
 	let titleValue = title;
 	let sourceValue = source;
@@ -65,8 +70,23 @@
 </script>
 
 <div
-	class="mx-auto shadow-3xl min-w-fit min-h-fit scrollbar-hidden bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-lg border border-white dark:border-gray-850 max-w-[500px] overflow-hidden"
+	class="mx-auto shadow-3xl min-w-fit min-h-fit scrollbar-hidden bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-lg border border-white dark:border-gray-850 max-w-[500px] overflow-hidden relative"
 >
+	{#if showLoading}
+		<!-- Loading overlay -->
+		<div class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+			<div class="relative">
+				<div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+			</div>
+			<p class="mt-4 text-gray-600 dark:text-gray-300 text-sm font-medium">
+				Processing draft...
+			</p>
+			<p class="mt-1 text-gray-400 dark:text-gray-500 text-xs">
+				This may take a moment
+			</p>
+		</div>
+	{/if}
+
 	{#if images && images.length > 0}
 		<div class="w-full mx-auto flex justify-center">
 			<ImageSlider {images} width={500} height={300} />
@@ -74,7 +94,7 @@
 	{/if}
 
 	<!-- Форма-->
-	<form class="p-3 flex flex-col">
+	<form class="p-3 flex flex-col" class:opacity-50={showLoading} class:pointer-events-none={showLoading}>
 		<!-- Основные поля формы -->
 		<FormField
 			id="title-input"

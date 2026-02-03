@@ -466,6 +466,8 @@
 	>
 		{#if lang === 'widget'}
 			{#if widgetData && widgetData.draft}
+				{@const draftStatus = widgetData.draft.status || ''}
+				{@const draftIsProcessing = widgetData.meta?.is_processing || draftStatus === 'new' || draftStatus === 'processing'}
 				<div class="p-4">
 					<DraftCard
 						images={widgetData.draft.final_data?.images || []}
@@ -475,6 +477,8 @@
 						type={widgetData.draft.final_data?.type || ''}
 						brand={widgetData.draft.final_data?.brand || ''}
 						article={widgetData.draft.final_data?.article || ''}
+						status={draftStatus}
+						isProcessing={draftIsProcessing}
 						onGenerateTitle={async () => {
 							if (!widgetData?.draft) return;
 							try {

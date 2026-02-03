@@ -939,3 +939,75 @@ async def delete_all_tags_by_id(id: str, user=Depends(get_verified_user)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND
         )
+
+
+############################
+# Pending Drafts (для polling статуса черновиков)
+############################
+
+from open_webui.models.pending_drafts import (
+    PendingDrafts,
+    PendingDraftForm,
+    PendingDraftResponse,
+)
+
+
+# ВАЖНО: Этот маршрут должен быть ПЕРЕД маршрутами с {id}, чтобы FastAPI не интерпретировал "pending-drafts" как id
+@router.get("/pending-drafts/all", response_model=list[PendingDraftResponse])
+async def get_all_pending_drafts(user=Depends(get_verified_user)):
+    """Получить все pending drafts пользователя"""
+    pending_list = PendingDrafts.get_all_pending_drafts_by_user_id(user.id)
+    return [
+        PendingDraftResponse(
+            chat_id=p.id,
+            draft_id=p.draft_id,
+            created_at=p.created_at
+        )
+        for p in pending_list
+    ]
+
+
+@router.get("/{id}/pending-draft", response_model=Optional[PendingDraftResponse])
+async def get_pending_draft_by_chat_id(id: str, user=Depends(get_verified_user)):
+    """Получить pending draft для чата"""
+    pending = PendingDrafts.get_pending_draft_by_chat_id(id, user.id)
+    if pending:
+        return PendingDraftResponse(
+            chat_id=pending.id,
+            draft_id=pending.draft_id,
+            created_at=pending.created_at
+        )
+    return None
+
+
+@router.post("/{id}/pending-draft", response_model=Optional[PendingDraftResponse])
+async def create_pending_draft(
+    id: str, form_data: PendingDraftForm, user=Depends(get_verified_user)
+):
+    """Создать pending draft для чата"""
+    # Проверяем что чат принадлежит пользователю
+    chat = Chats.get_chat_by_id_and_user_id(id, user.id)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND
+        )
+    
+    pending = PendingDrafts.create_pending_draft(id, user.id, form_data.draft_id)
+    if pending:
+        return PendingDraftResponse(
+            chat_id=pending.id,
+            draft_id=pending.draft_id,
+            created_at=pending.created_at
+        )
+    
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to create pending draft"
+    )
+
+
+@router.delete("/{id}/pending-draft", response_model=bool)
+async def delete_pending_draft(id: str, user=Depends(get_verified_user)):
+    """Удалить pending draft для чата"""
+    return PendingDrafts.delete_pending_draft(id, user.id)

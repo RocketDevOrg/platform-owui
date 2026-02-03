@@ -65,7 +65,10 @@
 		getPinnedChatList,
 		getTagsById,
 		updateChatById,
-		updateChatFolderIdById
+		updateChatFolderIdById,
+		getPendingDraft,
+		createPendingDraft,
+		deletePendingDraft
 	} from '$lib/apis/chats';
 	import { generateOpenAIChatCompletion } from '$lib/apis/openai';
 	import { generateFastAPIChatCompletion } from '$lib/apis/severnaya';
@@ -161,6 +164,12 @@
 
 	let taskIds = null;
 
+	// Pending draft polling state
+	let pendingDraftId: string | null = null;
+	let pendingDraftProcessing = false; // Флаг блокировки инпута при обработке черновика
+	let draftPollingInterval: ReturnType<typeof setInterval> | null = null;
+	const DRAFT_POLLING_INTERVAL_MS = 3000; // 3 секунды между запросами
+
 	// Chat Input
 	let prompt = '';
 	let chatFiles = [];
@@ -173,6 +182,9 @@
 
 	const navigateHandler = async () => {
 		loading = true;
+
+		// Останавливаем polling от предыдущего чата при переключении
+		stopDraftPolling();
 
 		prompt = '';
 		messageInput?.setText('');
@@ -642,6 +654,9 @@
 
 	onDestroy(() => {
 		try {
+			// Останавливаем polling черновика при уничтожении компонента
+			stopDraftPolling();
+			
 			pageSubscribe();
 			showControlsSubscribe();
 			selectedFolderSubscribe();
@@ -1140,6 +1155,9 @@
 					taskIds = taskRes.task_ids;
 				}
 
+				// Проверяем наличие pending draft и возобновляем polling
+				await checkAndResumeDraftPolling($chatId);
+
 				await tick();
 
 				return true;
@@ -1156,6 +1174,140 @@
 				top: messagesContainerElement.scrollHeight,
 				behavior
 			});
+		}
+	};
+
+	// ============================================================
+	// Pending Draft Polling (для отслеживания статуса черновика)
+	// ============================================================
+
+	/**
+	 * Останавливает polling черновика и разблокирует инпут
+	 */
+	const stopDraftPolling = () => {
+		if (draftPollingInterval) {
+			clearInterval(draftPollingInterval);
+			draftPollingInterval = null;
+		}
+		pendingDraftId = null;
+		pendingDraftProcessing = false;
+	};
+
+	/**
+	 * Обновляет виджет черновика в истории сообщений
+	 */
+	const updateDraftWidgetInHistory = (draftId: string, draftData: any) => {
+		// Находим сообщение с виджетом черновика
+		for (const messageId of Object.keys(history.messages)) {
+			const message = history.messages[messageId];
+			if (message.role === 'assistant' && message.content) {
+				// Ищем widget code block с draft_id
+				const widgetMatch = message.content.match(/```widget\n([\s\S]*?)\n```/);
+				if (widgetMatch) {
+					try {
+						const widgetJson = JSON.parse(widgetMatch[1]);
+						if (widgetJson.widget_data?.draft?.id === draftId) {
+							// Обновляем данные черновика
+							widgetJson.widget_data.draft = {
+								...widgetJson.widget_data.draft,
+								...draftData
+							};
+							
+							// Заменяем widget в контенте
+							const newWidgetContent = `\`\`\`widget\n${JSON.stringify(widgetJson, null, 2)}\n\`\`\``;
+							message.content = message.content.replace(/```widget\n[\s\S]*?\n```/, newWidgetContent);
+							
+							// Обновляем history для реактивности
+							history = { ...history };
+							
+							console.log('[Polling] Updated draft widget:', draftId);
+							return true;
+						}
+					} catch (e) {
+						console.error('[Polling] Failed to parse widget JSON:', e);
+					}
+				}
+			}
+		}
+		return false;
+	};
+
+	/**
+	 * Выполняет polling статуса черновика
+	 */
+	const pollDraftStatus = async (draftId: string, chatIdForPoll: string) => {
+		try {
+			const { getDraft } = await import('$lib/apis/severnaya');
+			const draft = await getDraft(localStorage.token, draftId);
+			
+			console.log('[Polling] Draft status:', draft?.status, 'for draft:', draftId);
+			
+			if (!draft) {
+				console.error('[Polling] Failed to get draft');
+				return;
+			}
+
+			// Обновляем виджет с новыми данными
+			updateDraftWidgetInHistory(draftId, draft);
+
+			// Проверяем статус - если не processing, останавливаем polling
+			if (draft.status !== 'new' && draft.status !== 'processing') {
+				console.log('[Polling] Draft processing complete, status:', draft.status);
+				
+				// Удаляем pending draft из базы
+				try {
+					await deletePendingDraft(localStorage.token, chatIdForPoll);
+					console.log('[Polling] Deleted pending draft for chat:', chatIdForPoll);
+				} catch (e) {
+					console.error('[Polling] Failed to delete pending draft:', e);
+				}
+				
+				// Останавливаем polling
+				stopDraftPolling();
+				
+				// Сохраняем обновленный чат
+				if ($chatId === chatIdForPoll) {
+					await saveChatHandler($chatId, history);
+				}
+			}
+		} catch (e) {
+			console.error('[Polling] Error polling draft:', e);
+		}
+	};
+
+	/**
+	 * Запускает polling для черновика и блокирует инпут
+	 */
+	const startDraftPolling = (draftId: string, chatIdForPoll: string) => {
+		// Останавливаем предыдущий polling если есть
+		stopDraftPolling();
+		
+		pendingDraftId = draftId;
+		pendingDraftProcessing = true; // Блокируем инпут
+		console.log('[Polling] Starting polling for draft:', draftId, 'chat:', chatIdForPoll);
+		
+		// Первый запрос сразу
+		pollDraftStatus(draftId, chatIdForPoll);
+		
+		// Запускаем интервал
+		draftPollingInterval = setInterval(() => {
+			pollDraftStatus(draftId, chatIdForPoll);
+		}, DRAFT_POLLING_INTERVAL_MS);
+	};
+
+	/**
+	 * Проверяет наличие pending draft для текущего чата и возобновляет polling
+	 */
+	const checkAndResumeDraftPolling = async (chatIdToCheck: string) => {
+		try {
+			const pendingDraft = await getPendingDraft(localStorage.token, chatIdToCheck);
+			
+			if (pendingDraft && pendingDraft.draft_id) {
+				console.log('[Polling] Found pending draft for chat:', chatIdToCheck, 'draft:', pendingDraft.draft_id);
+				startDraftPolling(pendingDraft.draft_id, chatIdToCheck);
+			}
+		} catch (e) {
+			console.error('[Polling] Error checking pending draft:', e);
 		}
 	};
 	const chatCompletedHandler = async (_chatId, modelId, responseMessageId, messages) => {
@@ -2042,29 +2194,56 @@
 					
 					if (response) {
 						console.log('Ingest successful:', response);
+						
+						// Определяем статус обработки
+						const isProcessing = response.status === 'processing' || response.status === 'new';
+						
 						// Создаем ответное сообщение с виджетом черновика
 						const widgetData = {
 							type: 'widget',
 							widget_type: 'draft',
 							widget_data: {
-								draft: { id: response.draft_id },
+								draft: { 
+									id: response.draft_id,
+									status: response.status
+								},
 								meta: {
-									can_edit: true,
-									can_commit: true,
+									can_edit: !isProcessing,
+									can_commit: !isProcessing,
 									source_label: file ? 'Файл' : 'Текст',
-									created_at: new Date().toISOString()
+									created_at: new Date().toISOString(),
+									is_processing: isProcessing
 								}
 							}
 						};
 						
 						const widgetMarkdown = `\n\n\`\`\`widget\n${JSON.stringify(widgetData, null, 2)}\n\`\`\`\n\n`;
 						
+						// Если статус processing - сохраняем pending draft и запускаем polling
+						if (isProcessing && _chatId) {
+							try {
+								await createPendingDraft(localStorage.token, _chatId, response.draft_id);
+								console.log('[Ingest] Created pending draft for chat:', _chatId, 'draft:', response.draft_id);
+								
+								// Запускаем polling после небольшой задержки (чтобы сообщение успело отобразиться)
+								setTimeout(() => {
+									startDraftPolling(response.draft_id, _chatId);
+								}, 1000);
+							} catch (e) {
+								console.error('[Ingest] Failed to create pending draft:', e);
+							}
+						}
+						
 						// Создаем streaming ответ с виджетом
+						const statusMessage = isProcessing 
+							? 'Карточка создана, идёт обработка...\n\n'
+							: 'Черновик карточки создан.\n\n';
+						
 						const stream = new ReadableStream({
 							async start(controller) {
 								const encoder = new TextEncoder();
 								controller.enqueue(
-									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Черновик карточки создан.\n\n' } }] })}\n\n`)
+									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMessage } }] })}\n\n`)
 								);
 								await new Promise(resolve => setTimeout(resolve, 300));
 								controller.enqueue(
@@ -2585,16 +2764,38 @@
 		let _chatId = $chatId;
 
 		if (!$temporaryChatEnabled) {
+			// Формируем название чата из первого сообщения или названия файла
+			const messages = createMessagesList(history, history.currentId);
+			const firstUserMessage = messages.find((m) => m.role === 'user');
+			let chatTitleText = $i18n.t('New Chat');
+			
+			if (firstUserMessage) {
+				// Убираем маркеры типа действия из текста
+				let content = firstUserMessage.content || '';
+				content = content.replace(/^(Создать карточку:|Поиск аналогов:)\s*/i, '').trim();
+				
+				if (content) {
+					// Есть текст сообщения - используем его
+					chatTitleText = content.length > 50 ? `${content.slice(0, 50)}...` : content;
+				} else if (firstUserMessage.files && firstUserMessage.files.length > 0) {
+					// Только файлы - используем название первого файла
+					const fileName = firstUserMessage.files[0].name || firstUserMessage.files[0].file?.name;
+					if (fileName) {
+						chatTitleText = fileName.length > 50 ? `${fileName.slice(0, 50)}...` : fileName;
+					}
+				}
+			}
+
 			chat = await createNewChat(
 				localStorage.token,
 				{
 					id: _chatId,
-					title: $i18n.t('New Chat'),
+					title: chatTitleText,
 					models: selectedModels,
 					system: $settings.system ?? undefined,
 					params: params,
 					history: history,
-					messages: createMessagesList(history, history.currentId),
+					messages: messages,
 					tags: [],
 					timestamp: Date.now()
 				},
@@ -2860,7 +3061,8 @@
 									bind:atSelectedModel
 									bind:showCommands
 									toolServers={$toolServers}
-									{generating}
+									generating={generating || pendingDraftProcessing}
+									{pendingDraftProcessing}
 									{stopResponse}
 									{createMessagePair}
 									onChange={(data) => {

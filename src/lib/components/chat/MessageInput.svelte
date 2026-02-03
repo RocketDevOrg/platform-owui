@@ -93,6 +93,7 @@
 
 	export let autoScroll = false;
 	export let generating = false;
+	export let pendingDraftProcessing = false; // Флаг обработки черновика (для отображения спиннера вместо Stop)
 
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
@@ -1732,25 +1733,53 @@
 
 									{#if (taskIds && taskIds.length > 0) || (history.currentId && history.messages[history.currentId]?.done != true) || generating}
 										<div class=" flex items-center">
-											<Tooltip content={$i18n.t('Stop')}>
+											<Tooltip content={pendingDraftProcessing ? $i18n.t('Processing...') : $i18n.t('Stop')}>
 												<button
-													class="bg-white hover:bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-800 transition rounded-full p-1.5"
+													class="bg-white text-gray-800 dark:bg-gray-700 dark:text-white transition rounded-full p-1.5 {pendingDraftProcessing ? 'opacity-70 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}"
+													disabled={pendingDraftProcessing}
 													on:click={() => {
-														stopResponse();
+														if (!pendingDraftProcessing) {
+															stopResponse();
+														}
 													}}
 												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 24 24"
-														fill="currentColor"
-														class="size-5"
-													>
-														<path
-															fill-rule="evenodd"
-															d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm6-2.438c0-.724.588-1.312 1.313-1.312h4.874c.725 0 1.313.588 1.313 1.313v4.874c0 .725-.588 1.313-1.313 1.313H9.564a1.312 1.312 0 01-1.313-1.313V9.564z"
-															clip-rule="evenodd"
-														/>
-													</svg>
+													{#if pendingDraftProcessing}
+														<!-- Спиннер при обработке черновика -->
+														<svg
+															class="size-5 animate-spin"
+															xmlns="http://www.w3.org/2000/svg"
+															fill="none"
+															viewBox="0 0 24 24"
+														>
+															<circle
+																class="opacity-25"
+																cx="12"
+																cy="12"
+																r="10"
+																stroke="currentColor"
+																stroke-width="4"
+															/>
+															<path
+																class="opacity-75"
+																fill="currentColor"
+																d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+															/>
+														</svg>
+													{:else}
+														<!-- Иконка Stop -->
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 24 24"
+															fill="currentColor"
+															class="size-5"
+														>
+															<path
+																fill-rule="evenodd"
+																d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm6-2.438c0-.724.588-1.312 1.313-1.312h4.874c.725 0 1.313.588 1.313 1.313v4.874c0 .725-.588 1.313-1.313 1.313H9.564a1.312 1.312 0 01-1.313-1.313V9.564z"
+																clip-rule="evenodd"
+															/>
+														</svg>
+													{/if}
 												</button>
 											</Tooltip>
 										</div>

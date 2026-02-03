@@ -642,7 +642,8 @@
 					</Tooltip>
 				</div>
 
-				{#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
+				<!-- ЗАКОММЕНТИРОВАНО: Заметки отключены -->
+				<!-- {#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
 					<div class="">
 						<Tooltip content={$i18n.t('Notes')} placement="right">
 							<a
@@ -664,9 +665,10 @@
 							</a>
 						</Tooltip>
 					</div>
-				{/if}
+				{/if} -->
 
-				{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools}
+				<!-- ЗАКОММЕНТИРОВАНО: Workspace отключен -->
+				<!-- {#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools}
 					<div class="">
 						<Tooltip content={$i18n.t('Workspace')} placement="right">
 							<a
@@ -701,7 +703,7 @@
 							</a>
 						</Tooltip>
 					</div>
-				{/if}
+				{/if} -->
 			</div>
 		</button>
 
@@ -877,7 +879,8 @@
 						</button>
 					</div>
 
-					{#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
+					<!-- ЗАКОММЕНТИРОВАНО: Заметки отключены -->
+					<!-- {#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
 						<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
 							<a
 								id="sidebar-notes-button"
@@ -896,9 +899,10 @@
 								</div>
 							</a>
 						</div>
-					{/if}
+					{/if} -->
 
-					{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools}
+					<!-- ЗАКОММЕНТИРОВАНО: Workspace отключен -->
+					<!-- {#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools}
 						<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
 							<a
 								id="sidebar-workspace-button"
@@ -930,7 +934,7 @@
 								</div>
 							</a>
 						</div>
-					{/if}
+					{/if} -->
 				</div>
 
 				{#if ($models ?? []).length > 0 && (($settings?.pinnedModels ?? []).length > 0 || $config?.default_pinned_models)}

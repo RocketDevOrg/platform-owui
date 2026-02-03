@@ -476,6 +476,8 @@ from open_webui.env import (
     EXTERNAL_PWA_MANIFEST_URL,
     AIOHTTP_CLIENT_SESSION_SSL,
     ENABLE_STAR_SESSIONS_MIDDLEWARE,
+    # FastAPI integration
+    FASTAPI_BASE_URL,
 )
 
 
@@ -1423,6 +1425,215 @@ if audit_level != AuditLevel.NONE:
         excluded_paths=AUDIT_EXCLUDED_PATHS,
         max_body_size=MAX_BODY_LOG_SIZE,
     )
+##################################
+#
+# FastAPI Proxy Endpoints (для обхода CORS)
+#
+##################################
+
+@app.post("/api/v1/severnaya/ingest")
+async def proxy_ingest(
+    request: Request,
+    user=Depends(get_verified_user)
+):
+    """
+    Проксирует запросы к FastAPI /ingest эндпоинту
+    Для text/url отправляет JSON, для file - multipart/form-data
+    """
+    try:
+        # Получаем FormData из запроса
+        form = await request.form()
+        
+        # Определяем тип источника
+        source_type = form.get("source_type")
+        has_file = any(isinstance(v, UploadFile) for v in form.values())
+        
+        # Подготавливаем заголовки
+        headers = {
+            "Accept": "application/json",
+        }
+        
+        # Прокидываем токен авторизации, если есть
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            headers["authorization"] = auth_header
+        
+        timeout = aiohttp.ClientTimeout(total=300)
+        
+        # Если есть файл - отправляем multipart/form-data
+        if has_file:
+            data = aiohttp.FormData()
+            for key, value in form.items():
+                if isinstance(value, UploadFile):
+                    # Если это файл, читаем его содержимое
+                    file_content = await value.read()
+                    data.add_field(
+                        key,
+                        file_content,
+                        filename=value.filename,
+                        content_type=value.content_type
+                    )
+                else:
+                    data.add_field(key, value)
+            
+            async with aiohttp.ClientSession(
+                trust_env=True,
+                timeout=timeout
+            ) as session:
+                async with session.post(
+                    f"{FASTAPI_BASE_URL}/ingest",
+                    data=data,
+                    headers=headers,
+                ) as response:
+                    response_data = await response.read()
+                    return Response(
+                        content=response_data,
+                        status_code=response.status,
+                        media_type=response.headers.get("Content-Type", "application/json"),
+                    )
+        else:
+            # Если нет файла - отправляем JSON
+            payload = {}
+            for key, value in form.items():
+                if not isinstance(value, UploadFile):
+                    payload[key] = value
+            
+            headers["Content-Type"] = "application/json"
+            
+            async with aiohttp.ClientSession(
+                trust_env=True,
+                timeout=timeout
+            ) as session:
+                async with session.post(
+                    f"{FASTAPI_BASE_URL}/ingest",
+                    json=payload,
+                    headers=headers,
+                ) as response:
+                    response_data = await response.read()
+                    return Response(
+                        content=response_data,
+                        status_code=response.status,
+                        media_type=response.headers.get("Content-Type", "application/json"),
+                    )
+    except Exception as e:
+        log.error(f"Error proxying ingest request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error proxying request to FastAPI: {str(e)}"
+        )
+
+
+@app.post("/api/v1/severnaya/search/analogs")
+async def proxy_search_analogs(
+    request: Request,
+    user=Depends(get_verified_user)
+):
+    """
+    Проксирует запросы к FastAPI /search/analogs эндпоинту
+    Обрабатывает FormData с текстом и файлом
+    """
+    try:
+        # Получаем FormData из запроса
+        form = await request.form()
+        
+        # Создаем новый FormData для отправки в FastAPI
+        data = aiohttp.FormData()
+        
+        # Копируем все поля из исходного FormData
+        for key, value in form.items():
+            if isinstance(value, UploadFile):
+                # Если это файл, читаем его содержимое
+                file_content = await value.read()
+                data.add_field(
+                    key,
+                    file_content,
+                    filename=value.filename,
+                    content_type=value.content_type
+                )
+            else:
+                data.add_field(key, value)
+        
+        # Подготавливаем заголовки
+        headers = {
+            "Accept": "application/json",
+        }
+        
+        # Прокидываем токен авторизации, если есть
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            headers["authorization"] = auth_header
+        
+        # Отправляем запрос в FastAPI
+        timeout = aiohttp.ClientTimeout(total=300)
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            timeout=timeout
+        ) as session:
+            async with session.post(
+                f"{FASTAPI_BASE_URL}/search/analogs",
+                data=data,
+                headers=headers,
+            ) as response:
+                response_data = await response.read()
+                
+                # Возвращаем ответ с теми же заголовками
+                return Response(
+                    content=response_data,
+                    status_code=response.status,
+                    media_type=response.headers.get("Content-Type", "application/json"),
+                )
+    except Exception as e:
+        log.error(f"Error proxying search analogs request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error proxying request to FastAPI: {str(e)}"
+        )
+
+
+@app.get("/api/v1/severnaya/drafts/{draft_id}")
+async def proxy_get_draft(
+    draft_id: str,
+    request: Request,
+    user=Depends(get_verified_user)
+):
+    """
+    Проксирует запросы к FastAPI GET /drafts/{id} эндпоинту
+    Для получения статуса черновика при polling
+    """
+    try:
+        # Подготавливаем заголовки
+        headers = {
+            "Accept": "application/json",
+        }
+        
+        # Прокидываем токен авторизации, если есть
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            headers["authorization"] = auth_header
+        
+        timeout = aiohttp.ClientTimeout(total=60)
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            timeout=timeout
+        ) as session:
+            async with session.get(
+                f"{FASTAPI_BASE_URL}/drafts/{draft_id}",
+                headers=headers,
+            ) as response:
+                response_data = await response.read()
+                return Response(
+                    content=response_data,
+                    status_code=response.status,
+                    media_type=response.headers.get("Content-Type", "application/json"),
+                )
+    except Exception as e:
+        log.error(f"Error proxying get draft request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error proxying request to FastAPI: {str(e)}"
+        )
+
+
 ##################################
 #
 # Chat Endpoints

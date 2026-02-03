@@ -1166,3 +1166,144 @@ export const archiveAllChats = async (token: string) => {
 
 	return res;
 };
+
+// ===== Pending Drafts API =====
+// Для хранения draft_id черновиков в статусе processing и возобновления polling
+
+export interface PendingDraftResponse {
+	chat_id: string;
+	draft_id: string;
+	created_at: number;
+}
+
+/**
+ * Получить pending draft для чата
+ */
+export const getPendingDraft = async (token: string, chatId: string): Promise<PendingDraftResponse | null> => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/${chatId}/pending-draft`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) {
+				if (res.status === 404) return null;
+				throw await res.json();
+			}
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error getting pending draft:', err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+/**
+ * Получить все pending drafts пользователя
+ */
+export const getAllPendingDrafts = async (token: string): Promise<PendingDraftResponse[]> => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/pending-drafts/all`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error getting all pending drafts:', err);
+			return [];
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res || [];
+};
+
+/**
+ * Создать pending draft для чата
+ */
+export const createPendingDraft = async (
+	token: string,
+	chatId: string,
+	draftId: string
+): Promise<PendingDraftResponse | null> => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/${chatId}/pending-draft`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ draft_id: draftId })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error creating pending draft:', err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+/**
+ * Удалить pending draft для чата
+ */
+export const deletePendingDraft = async (token: string, chatId: string): Promise<boolean> => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/${chatId}/pending-draft`, {
+		method: 'DELETE',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err;
+			console.error('Error deleting pending draft:', err);
+			return false;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
