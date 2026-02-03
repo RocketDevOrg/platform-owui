@@ -219,6 +219,41 @@ export const ingestFile = async (
 };
 
 /**
+ * Проверяет, является ли строка валидным URL
+ */
+const isValidUrl = (str: string): boolean => {
+	if (!str || !str.trim()) return false;
+	const trimmed = str.trim();
+	// Проверяем, начинается ли строка с http:// или https://
+	if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+		return false;
+	}
+	try {
+		new URL(trimmed);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+/**
+ * Определяет тип источника данных для ingest
+ * Приоритет: file > url > text
+ */
+export const determineSourceType = (text: string, file?: File): 'url' | 'file' | 'text' => {
+	// Приоритет 1: Если есть файл — это file
+	if (file) {
+		return 'file';
+	}
+	// Приоритет 2: Если текст — валидный URL — это url
+	if (isValidUrl(text)) {
+		return 'url';
+	}
+	// Приоритет 3: Иначе — это text
+	return 'text';
+};
+
+/**
  * Создает черновик карточки товара по тексту и файлу (если есть)
  * Отправляет FormData с текстом и файлом на эндпоинт /ingest
  * 
@@ -229,11 +264,15 @@ export const ingestWithFormData = async (
 	text: string,
 	file?: File
 ): Promise<IngestResponse> => {
+	const sourceType = determineSourceType(text, file);
+	
 	// МОК: Возвращаем мок-данные если флаг включен
 	if (USE_MOCK_DATA) {
-		console.log('[MOCK] ingestWithFormData:', { text: text.substring(0, 50), file: file?.name });
-		if (file) {
+		console.log('[MOCK] ingestWithFormData:', { sourceType, text: text.substring(0, 50), file: file?.name });
+		if (sourceType === 'file' && file) {
 			return await mockIngestFileResponse(file.name);
+		} else if (sourceType === 'url') {
+			return await mockIngestUrlResponse(text.trim());
 		} else {
 			return await mockIngestTextResponse(text);
 		}
@@ -243,16 +282,17 @@ export const ingestWithFormData = async (
 	let error = null;
 
 	const formData = new FormData();
+	formData.append('source_type', sourceType);
 	
-	if (file) {
-		formData.append('source_type', 'file');
+	if (sourceType === 'file' && file) {
 		formData.append('file', file);
-		// Если есть текст, добавляем его тоже
+		// Опционально: добавляем текст как дополнительное описание
 		if (text && text.trim()) {
-			formData.append('text', text);
+			formData.append('text', text.trim());
 		}
+	} else if (sourceType === 'url') {
+		formData.append('url', text.trim());
 	} else {
-		formData.append('source_type', 'text');
 		formData.append('text', text);
 	}
 

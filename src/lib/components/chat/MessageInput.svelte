@@ -46,7 +46,7 @@
 	import { deleteFileById } from '$lib/apis/files';
 	import { getSessionUser } from '$lib/apis/auths';
 	import { getTools } from '$lib/apis/tools';
-	import { ingestFile } from '$lib/apis/severnaya';
+	import { ingestFile, determineSourceType } from '$lib/apis/severnaya';
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
 
@@ -116,6 +116,19 @@
 
 	// Опция действия: создание карточки или поиск аналогов
 	let actionType: 'ingest' | 'search' = 'ingest';
+
+	// Определяем тип источника для ingest (url/file/text)
+	$: currentSourceType = (() => {
+		const hasFile = files.some((f) => f.type === 'file' && f.file instanceof File);
+		return determineSourceType(prompt, hasFile ? new File([], '') : undefined);
+	})();
+
+	// Подписи для типов источника
+	const sourceTypeLabels = {
+		url: 'URL',
+		file: 'File',
+		text: 'Text'
+	};
 
 	let showInputVariablesModal = false;
 	let inputVariablesModalCallback = (variableValues) => {};
@@ -1427,6 +1440,33 @@
 											</button>
 										</Tooltip>
 									</div>
+
+									<!-- Индикатор типа источника -->
+									{#if actionType === 'ingest'}
+										<Tooltip content="Тип источника определяется автоматически: URL (ссылка), File (файл) или Text (текст)" placement="top">
+											<div class="flex items-center gap-1 px-2 py-1 text-xs rounded-full
+												{currentSourceType === 'url' 
+													? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
+													: currentSourceType === 'file' 
+														? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
+														: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}">
+												{#if currentSourceType === 'url'}
+													<svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+													</svg>
+												{:else if currentSourceType === 'file'}
+													<svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+													</svg>
+												{:else}
+													<svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+													</svg>
+												{/if}
+												<span>{sourceTypeLabels[currentSourceType]}</span>
+											</div>
+										</Tooltip>
+									{/if}
 
 									{#if actionType === 'ingest' || actionType === 'search'}
 										<div

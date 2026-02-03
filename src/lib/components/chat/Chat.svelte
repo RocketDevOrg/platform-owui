@@ -92,7 +92,7 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
-	import ChatControls from './ChatControls.svelte';
+	// import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
@@ -107,8 +107,8 @@
 	let loading = true;
 
 	const eventTarget = new EventTarget();
-	let controlPane;
-	let controlPaneComponent;
+	// let controlPane;
+	// let controlPaneComponent;
 
 	let messageInput;
 
@@ -554,7 +554,7 @@
 	}
 
 	let pageSubscribe = null;
-	let showControlsSubscribe = null;
+	// let showControlsSubscribe = null;
 	let selectedFolderSubscribe = null;
 
 	const stopAudio = () => {
@@ -616,26 +616,26 @@
 			} catch (e) {}
 		}
 
-		showControlsSubscribe = showControls.subscribe(async (value) => {
-			if (controlPane && !$mobile) {
-				try {
-					if (value) {
-						controlPaneComponent.openPane();
-					} else {
-						controlPane.collapse();
-					}
-				} catch (e) {
-					// ignore
-				}
-			}
+		// showControlsSubscribe = showControls.subscribe(async (value) => {
+		// 	if (controlPane && !$mobile) {
+		// 		try {
+		// 			if (value) {
+		// 				controlPaneComponent.openPane();
+		// 			} else {
+		// 				controlPane.collapse();
+		// 			}
+		// 		} catch (e) {
+		// 			// ignore
+		// 		}
+		// 	}
 
-			if (!value) {
-				showCallOverlay.set(false);
-				showOverview.set(false);
-				showArtifacts.set(false);
-				showEmbeds.set(false);
-			}
-		});
+		// 	if (!value) {
+		// 		showCallOverlay.set(false);
+		// 		showOverview.set(false);
+		// 		showArtifacts.set(false);
+		// 		showEmbeds.set(false);
+		// 	}
+		// });
 
 		selectedFolderSubscribe = selectedFolder.subscribe(async (folder) => {
 			if (
@@ -658,7 +658,7 @@
 			stopDraftPolling();
 			
 			pageSubscribe();
-			showControlsSubscribe();
+			// showControlsSubscribe();
 			selectedFolderSubscribe();
 			chatIdUnsubscriber?.();
 			window.removeEventListener('message', onMessageHandler);
@@ -1197,38 +1197,63 @@
 	 * Обновляет виджет черновика в истории сообщений
 	 */
 	const updateDraftWidgetInHistory = (draftId: string, draftData: any) => {
+		console.log('[updateWidget] Looking for draft widget:', draftId);
+		console.log('[updateWidget] History messages count:', Object.keys(history.messages).length);
+		
 		// Находим сообщение с виджетом черновика
 		for (const messageId of Object.keys(history.messages)) {
 			const message = history.messages[messageId];
+			console.log('[updateWidget] Checking message:', messageId, 'role:', message.role);
+			
 			if (message.role === 'assistant' && message.content) {
+				console.log('[updateWidget] Assistant message FULL content:', message.content);
+				console.log('[updateWidget] Content length:', message.content.length);
+				
 				// Ищем widget code block с draft_id
 				const widgetMatch = message.content.match(/```widget\n([\s\S]*?)\n```/);
 				if (widgetMatch) {
+					console.log('[updateWidget] Found widget block');
 					try {
 						const widgetJson = JSON.parse(widgetMatch[1]);
+						console.log('[updateWidget] Widget draft id:', widgetJson.widget_data?.draft?.id);
+						
 						if (widgetJson.widget_data?.draft?.id === draftId) {
-							// Обновляем данные черновика
+							console.log('[updateWidget] Matched! Updating widget data...');
+							
+							// Обновляем данные черновика (сохраняем meta)
 							widgetJson.widget_data.draft = {
 								...widgetJson.widget_data.draft,
 								...draftData
 							};
 							
+							// Обновляем meta для отражения нового статуса
+							if (widgetJson.widget_data.meta) {
+								const isProcessing = draftData.status === 'new' || draftData.status === 'processing';
+								widgetJson.widget_data.meta.is_processing = isProcessing;
+								widgetJson.widget_data.meta.can_edit = !isProcessing;
+								widgetJson.widget_data.meta.can_commit = !isProcessing;
+							}
+							
 							// Заменяем widget в контенте
 							const newWidgetContent = `\`\`\`widget\n${JSON.stringify(widgetJson, null, 2)}\n\`\`\``;
 							message.content = message.content.replace(/```widget\n[\s\S]*?\n```/, newWidgetContent);
 							
+							console.log('[updateWidget] New content preview:', message.content.substring(0, 300));
+							
 							// Обновляем history для реактивности
+							history.messages[messageId] = { ...message };
 							history = { ...history };
 							
-							console.log('[Polling] Updated draft widget:', draftId);
+							console.log('[updateWidget] Updated draft widget:', draftId, 'new status:', draftData.status);
 							return true;
 						}
 					} catch (e) {
-						console.error('[Polling] Failed to parse widget JSON:', e);
+						console.error('[updateWidget] Failed to parse widget JSON:', e);
 					}
 				}
 			}
 		}
+		console.log('[updateWidget] Widget not found for draft:', draftId);
 		return false;
 	};
 
@@ -1241,6 +1266,7 @@
 			const draft = await getDraft(localStorage.token, draftId);
 			
 			console.log('[Polling] Draft status:', draft?.status, 'for draft:', draftId);
+			console.log('[Polling] Full draft data:', JSON.stringify(draft, null, 2));
 			
 			if (!draft) {
 				console.error('[Polling] Failed to get draft');
@@ -1248,7 +1274,8 @@
 			}
 
 			// Обновляем виджет с новыми данными
-			updateDraftWidgetInHistory(draftId, draft);
+			const updated = updateDraftWidgetInHistory(draftId, draft);
+			console.log('[Polling] Widget update result:', updated);
 
 			// Проверяем статус - если не processing, останавливаем polling
 			if (draft.status !== 'new' && draft.status !== 'processing') {
@@ -1504,8 +1531,8 @@
 			parentId: userMessageId,
 			childrenIds: [],
 			role: 'assistant',
-			content: `[RESPONSE] ${responseMessageId}`,
-			done: true,
+			content: '',
+			done: false,
 			model: modelId,
 			modelName: model.name ?? model.id,
 			modelIdx: 0,
@@ -1532,8 +1559,27 @@
 		} else {
 			await saveChatHandler($chatId, history);
 		}
-		// ЗАКОММЕНТИРОВАНО: закрывающая скобка для else
-		// }
+		
+		// Получаем файлы из input (если есть)
+		const _files = files.map((item) => ({ ...item }));
+		files = [];
+		
+		// Добавляем файлы в userMessage
+		if (_files.length > 0) {
+			history.messages[userMessageId].files = _files;
+		}
+		
+		// Создаём список сообщений для отправки
+		const _messages = createMessagesList(history, userMessageId);
+		
+		// Отправляем запрос через sendMessageSocket
+		await sendMessageSocket(
+			model,
+			_messages,
+			history,
+			responseMessageId,
+			$chatId
+		);
 	};
 
 	const addMessages = async ({ modelId, parentId, messages }) => {
@@ -2218,6 +2264,7 @@
 						};
 						
 						const widgetMarkdown = `\n\n\`\`\`widget\n${JSON.stringify(widgetData, null, 2)}\n\`\`\`\n\n`;
+						console.log('[Ingest] Created widget markdown:', widgetMarkdown);
 						
 						// Если статус processing - сохраняем pending draft и запускаем polling
 						if (isProcessing && _chatId) {
@@ -2234,28 +2281,22 @@
 							}
 						}
 						
-						// Создаем streaming ответ с виджетом
+						// Записываем виджет напрямую в responseMessage
 						const statusMessage = isProcessing 
 							? 'Карточка создана, идёт обработка...\n\n'
 							: 'Черновик карточки создан.\n\n';
 						
-						const stream = new ReadableStream({
-							async start(controller) {
-								const encoder = new TextEncoder();
-								controller.enqueue(
-									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: statusMessage } }] })}\n\n`)
-								);
-								await new Promise(resolve => setTimeout(resolve, 300));
-								controller.enqueue(
-									encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: widgetMarkdown } }] })}\n\n`)
-								);
-								await new Promise(resolve => setTimeout(resolve, 100));
-								controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-								controller.close();
-							}
-						});
-
-						return { ok: true, body: stream, task_id: null };
+						responseMessage.content = statusMessage + widgetMarkdown;
+						responseMessage.done = true;
+						history.messages[responseMessageId] = responseMessage;
+						history = { ...history };
+						
+						console.log('[Ingest] Set responseMessage content:', responseMessage.content.substring(0, 200));
+						
+						// Сохраняем чат
+						await saveChatHandler(_chatId, history);
+						
+						return;
 					} else {
 						throw new Error('Failed to ingest');
 					}
@@ -2271,25 +2312,20 @@
 							`${i + 1}. ${r.name} (${r.match_type || 'analog'}, score: ${r.score})`
 						).join('\n');
 						
-						const stream = new ReadableStream({
-							async start(controller) {
-								const encoder = new TextEncoder();
-								const content = `Найдено аналогов: ${response.results.length}\n\n${resultsText}`;
-								const words = content.split(' ');
-								for (let i = 0; i < words.length; i++) {
-									await new Promise(resolve => setTimeout(resolve, 50));
-									const chunk = words[i] + (i < words.length - 1 ? ' ' : '');
-									controller.enqueue(
-										encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`)
-									);
-								}
-								await new Promise(resolve => setTimeout(resolve, 100));
-								controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-								controller.close();
-							}
-						});
-
-						return { ok: true, body: stream, task_id: null };
+						const content = `Найдено аналогов: ${response.results.length}\n\n${resultsText}`;
+						
+						// Записываем результат напрямую в responseMessage
+						responseMessage.content = content;
+						responseMessage.done = true;
+						history.messages[responseMessageId] = responseMessage;
+						history = { ...history };
+						
+						console.log('[Search] Set responseMessage content:', content.substring(0, 200));
+						
+						// Сохраняем чат
+						await saveChatHandler(_chatId, history);
+						
+						return;
 					} else {
 						throw new Error('Failed to search analogs');
 					}
@@ -3143,28 +3179,6 @@
 						{/if}
 					</div>
 				</Pane>
-
-				<ChatControls
-					bind:this={controlPaneComponent}
-					bind:history
-					bind:chatFiles
-					bind:params
-					bind:files
-					bind:pane={controlPane}
-					chatId={$chatId}
-					modelId={selectedModelIds?.at(0) ?? null}
-					models={selectedModelIds.reduce((a, e, i, arr) => {
-						const model = $models.find((m) => m.id === e);
-						if (model) {
-							return [...a, model];
-						}
-						return a;
-					}, [])}
-					{submitPrompt}
-					{stopResponse}
-					{showMessage}
-					{eventTarget}
-				/>
 			</PaneGroup>
 		</div>
 	{:else if loading}

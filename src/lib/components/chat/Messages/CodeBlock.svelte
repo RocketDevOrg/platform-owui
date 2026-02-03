@@ -470,13 +470,14 @@
 				{@const draftIsProcessing = widgetData.meta?.is_processing || draftStatus === 'new' || draftStatus === 'processing'}
 				<div class="p-4">
 					<DraftCard
-						images={widgetData.draft.final_data?.images || []}
-						title={widgetData.draft.final_data?.generated_name || widgetData.draft.final_data?.description || ''}
-						source={widgetData.draft.source_payload || ''}
+						images={((widgetData.draft.final_data?.images || []) as string[]).map((url) => ({ src: url, alt: '' }))}
+						title={widgetData.draft.final_data?.generated_name || ''}
 						kind={widgetData.draft.final_data?.kind || ''}
 						type={widgetData.draft.final_data?.type || ''}
 						brand={widgetData.draft.final_data?.brand || ''}
 						article={widgetData.draft.final_data?.article || ''}
+						description={widgetData.draft.final_data?.description || ''}
+						specs={(widgetData.draft.final_data as any)?.specs || {}}
 						status={draftStatus}
 						isProcessing={draftIsProcessing}
 						onGenerateTitle={async () => {
@@ -495,34 +496,28 @@
 								console.error('Error generating name:', error);
 							}
 						}}
-						onSave={async () => {
-							if (!widgetData?.draft) return;
+						onSave={async (formData) => {
+							if (!widgetData?.draft) return false;
 							try {
 								const token = localStorage.token || '';
+								console.log('[DraftCard] Saving draft:', widgetData.draft.id, formData);
 								await updateDraft(token, widgetData.draft.id, {
-									kind: widgetData.draft.final_data?.kind,
-									type: widgetData.draft.final_data?.type,
-									brand: widgetData.draft.final_data?.brand,
-									article: widgetData.draft.final_data?.article,
-									description: widgetData.draft.final_data?.description
+									generated_name: formData.generated_name,
+									kind: formData.kind,
+									type: formData.type,
+									brand: formData.brand,
+									article: formData.article,
+									description: formData.description,
+									specs: formData.specs
 								});
+								console.log('[DraftCard] Draft saved successfully');
+								return true;
 							} catch (error) {
 								console.error('Error saving draft:', error);
-							}
-						}}
-						onSendTo1C={async () => {
-							if (!widgetData?.draft) return;
-							try {
-								const token = localStorage.token || '';
-								await commitDraft(token, widgetData.draft.id);
-								// Обновляем статус
-								widgetData.draft.status = 'ready_to_sync';
-							} catch (error) {
-								console.error('Error committing draft:', error);
+								return false;
 							}
 						}}
 						loadingSave={false}
-						loadingSendTo1C={false}
 						loadingGenerateTitle={false}
 					/>
 				</div>
