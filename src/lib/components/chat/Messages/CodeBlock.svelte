@@ -74,7 +74,15 @@
 				article?: string;
 				description?: string;
 				generated_name?: string;
-				images?: Array<{ src: string; alt?: string }>;
+				specs?: Record<string, string>;
+				images?: Array<{ src: string; alt?: string }> | string[];
+			};
+			predictions?: {
+				gau?: { code: string; confidence: number };
+				duplicates?: {
+					count: number;
+					last_checked_at?: string;
+				};
 			};
 			source_payload?: string;
 		};
@@ -83,6 +91,7 @@
 			can_commit?: boolean;
 			source_label?: string;
 			created_at?: string;
+			is_processing?: boolean;
 		};
 	} | null = null;
 
@@ -96,6 +105,7 @@
 
 	let copied = false;
 	let saved = false;
+	let generatingTitle = false;
 
 	const collapseCodeBlock = () => {
 		collapsed = !collapsed;
@@ -478,22 +488,34 @@
 						article={widgetData.draft.final_data?.article || ''}
 						description={widgetData.draft.final_data?.description || ''}
 						specs={(widgetData.draft.final_data as any)?.specs || {}}
+						predictions={widgetData.draft.predictions}
 						status={draftStatus}
 						isProcessing={draftIsProcessing}
 						onGenerateTitle={async () => {
-							if (!widgetData?.draft) return;
+							if (!widgetData?.draft || generatingTitle) return;
+							generatingTitle = true;
 							try {
 								const token = localStorage.token || '';
 								const response = await generateName(token, widgetData.draft.id);
 								// Обновляем данные виджета
-								if (widgetData.draft.final_data) {
-									widgetData.draft.final_data = {
-										...widgetData.draft.final_data,
-										generated_name: response.generated_name
-									};
+								if (response && response.generated_name) {
+									if (widgetData.draft.final_data) {
+										widgetData.draft.final_data = {
+											...widgetData.draft.final_data,
+											generated_name: response.generated_name
+										};
+									} else {
+										widgetData.draft.final_data = {
+											generated_name: response.generated_name
+										};
+									}
+									// Триггерим реактивное обновление
+									widgetData = { ...widgetData };
 								}
 							} catch (error) {
 								console.error('Error generating name:', error);
+							} finally {
+								generatingTitle = false;
 							}
 						}}
 						onSave={async (formData) => {
@@ -501,7 +523,7 @@
 							try {
 								const token = localStorage.token || '';
 								console.log('[DraftCard] Saving draft:', widgetData.draft.id, formData);
-								await updateDraft(token, widgetData.draft.id, {
+								const response = await updateDraft(token, widgetData.draft.id, {
 									generated_name: formData.generated_name,
 									kind: formData.kind,
 									type: formData.type,
@@ -510,6 +532,23 @@
 									description: formData.description,
 									specs: formData.specs
 								});
+								
+								// Обновляем widgetData с данными из ответа (включая predictions)
+								if (response?.draft) {
+									widgetData = {
+										...widgetData,
+										draft: {
+											...widgetData.draft,
+											...response.draft,
+											final_data: {
+												...widgetData.draft.final_data,
+												...response.draft.final_data
+											}
+										}
+									};
+									console.log('[DraftCard] Draft updated with response:', response.draft);
+								}
+								
 								console.log('[DraftCard] Draft saved successfully');
 								return true;
 							} catch (error) {
@@ -518,7 +557,7 @@
 							}
 						}}
 						loadingSave={false}
-						loadingGenerateTitle={false}
+						loadingGenerateTitle={generatingTitle}
 					/>
 				</div>
 			{:else}

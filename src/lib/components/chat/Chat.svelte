@@ -1234,6 +1234,18 @@
 								widgetJson.widget_data.meta.can_commit = !isProcessing;
 							}
 							
+							// Обновляем текст статуса в зависимости от статуса черновика
+							const isProcessing = draftData.status === 'new' || draftData.status === 'processing';
+							const statusText = isProcessing 
+								? 'Карточка создана, идёт обработка...\n\n'
+								: 'Черновик карточки готов к редактированию.\n\n';
+							
+							// Заменяем старый текст статуса на новый
+							message.content = message.content.replace(
+								/^(Карточка создана, идёт обработка\.\.\.|Черновик карточки создан\.|Черновик карточки готов к редактированию\.)\n\n/,
+								statusText
+							);
+							
 							// Заменяем widget в контенте
 							const newWidgetContent = `\`\`\`widget\n${JSON.stringify(widgetJson, null, 2)}\n\`\`\``;
 							message.content = message.content.replace(/```widget\n[\s\S]*?\n```/, newWidgetContent);

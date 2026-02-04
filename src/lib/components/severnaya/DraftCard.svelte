@@ -28,13 +28,42 @@
 	}) => Promise<boolean>) | null = null;
 	export let loadingSave: boolean = false;
 	export let loadingGenerateTitle: boolean = false;
+	export let predictions: {
+		gau?: { code: string; confidence: number };
+		duplicates?: {
+			count: number;
+			last_checked_at?: string;
+		};
+	} | undefined = undefined;
 	
-	// Состояние сохранения - после успешного сохранения скрываем кнопку
+	// Состояние сохранения
 	let saved: boolean = false;
 	let saving: boolean = false;
 	
 	// Состояние аккордиона specs
 	let specsExpanded: boolean = false;
+	
+	// Форматирование даты последней проверки аналогов
+	const formatLastChecked = (dateStr?: string): string => {
+		if (!dateStr) return '';
+		try {
+			const date = new Date(dateStr);
+			return date.toLocaleDateString('ru-RU', { 
+				day: '2-digit', 
+				month: '2-digit', 
+				year: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			});
+		} catch {
+			return dateStr;
+		}
+	};
+	
+	// Проверка, устарели ли данные об аналогах (нет данных или сброшены)
+	$: duplicatesOutdated = predictions?.duplicates?.count === undefined || 
+		predictions?.duplicates?.count === null ||
+		!predictions?.duplicates?.last_checked_at;
 	
 	// Определяем, нужно ли показывать loading состояние
 	$: showLoading = isProcessing || status === 'new' || status === 'processing';
@@ -47,9 +76,21 @@
 	let articleValue = article;
 	let descriptionValue = description;
 	let specsValue: Record<string, string> = { ...specs };
+	
+	// Исходные значения для сравнения (обновляются только при загрузке и после сохранения)
+	let originalTitle = title;
+	let originalKind = kind;
+	let originalType = type;
+	let originalBrand = brand;
+	let originalArticle = article;
+	let originalDescription = description;
+	let originalSpecs: Record<string, string> = { ...specs };
+	
+	// Флаг инициализации (чтобы не перезаписывать локальные значения после первой загрузки)
+	let initialized = false;
 
-	// Синхронизация с пропсами
-	$: {
+	// Синхронизация с пропсами только при первой загрузке или смене draft_id
+	$: if (!initialized && (title || kind || type || brand || article || description || Object.keys(specs).length > 0)) {
 		titleValue = title;
 		kindValue = kind;
 		typeValue = type;
@@ -57,16 +98,62 @@
 		articleValue = article;
 		descriptionValue = description;
 		specsValue = { ...specs };
+		
+		originalTitle = title;
+		originalKind = kind;
+		originalType = type;
+		originalBrand = brand;
+		originalArticle = article;
+		originalDescription = description;
+		originalSpecs = { ...specs };
+		
+		initialized = true;
+		saved = false;
 	}
+	
+	// Отслеживаем изменение title извне (после генерации названия)
+	$: if (initialized && title && title !== originalTitle && title !== titleValue) {
+		titleValue = title;
+		originalTitle = title;
+	}
+	
+	// Сравнение объектов specs
+	const specsEqual = (a: Record<string, string>, b: Record<string, string>): boolean => {
+		const keysA = Object.keys(a);
+		const keysB = Object.keys(b);
+		if (keysA.length !== keysB.length) return false;
+		return keysA.every(key => a[key] === b[key]);
+	};
+	
+	// Проверяем, были ли внесены изменения
+	$: hasChanges = 
+		titleValue !== originalTitle ||
+		kindValue !== originalKind ||
+		typeValue !== originalType ||
+		brandValue !== originalBrand ||
+		articleValue !== originalArticle ||
+		descriptionValue !== originalDescription ||
+		!specsEqual(specsValue, originalSpecs);
 
 	$: {
 		console.log('[DraftCard] Images:', images, 'length:', images?.length);
 	}
 	
 	$: specsKeys = Object.keys(specsValue);
+	
+	// Обновить исходные значения после успешного сохранения
+	const updateOriginalValues = () => {
+		originalTitle = titleValue;
+		originalKind = kindValue;
+		originalType = typeValue;
+		originalBrand = brandValue;
+		originalArticle = articleValue;
+		originalDescription = descriptionValue;
+		originalSpecs = { ...specsValue };
+	};
 
 	const handleSave = async () => {
-		if (onSave && !saving && !saved) {
+		if (onSave && !saving && hasChanges) {
 			saving = true;
 			try {
 				// Передаём актуальные значения из формы
@@ -80,15 +167,19 @@
 					specs: specsValue
 				});
 				if (success) {
+					// Обновляем исходные значения после успешного сохранения
+					updateOriginalValues();
 					saved = true;
+					// Сбрасываем флаг saved через 3 секунды, чтобы кнопка снова появилась если будут новые изменения
+					setTimeout(() => {
+						saved = false;
+					}, 3000);
 				}
 			} catch (e) {
 				console.error('Error saving draft:', e);
 			} finally {
 				saving = false;
 			}
-		} else {
-			console.log('Save changes clicked');
 		}
 	};
 
@@ -263,25 +354,68 @@
 			</div>
 		{/if}
 
+		<!-- Predictions (классификация и аналоги) - временно скрыто -->
+		<!--
+		{#if predictions && !showLoading}
+			<div class="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-2">
+				{#if predictions.gau}
+					<div class="flex items-center justify-between text-sm">
+						<span class="text-gray-600 dark:text-gray-400">Классификация (GAU):</span>
+						<div class="flex items-center gap-2">
+							<span class="font-mono font-medium text-gray-900 dark:text-gray-100">{predictions.gau.code}</span>
+							<span class="text-xs px-1.5 py-0.5 rounded-full {predictions.gau.confidence >= 0.8 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : predictions.gau.confidence >= 0.5 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}">
+								{Math.round(predictions.gau.confidence * 100)}%
+							</span>
+						</div>
+					</div>
+				{/if}
+				
+				<div class="flex items-center justify-between text-sm">
+					<span class="text-gray-600 dark:text-gray-400">Аналоги:</span>
+					{#if duplicatesOutdated}
+						<span class="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+							</svg>
+							<span class="text-xs">Требуется проверка</span>
+						</span>
+					{:else}
+						<div class="flex items-center gap-2">
+							<span class="font-medium text-gray-900 dark:text-gray-100">
+								{predictions.duplicates?.count || 0}
+							</span>
+							{#if predictions.duplicates?.last_checked_at}
+								<span class="text-xs text-gray-400 dark:text-gray-500">
+									{formatLastChecked(predictions.duplicates.last_checked_at)}
+								</span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+		-->
+
 		<!-- Кнопка сохранения -->
 		<div class="mt-4 flex justify-between">
-			{#if !saved}
-				<Button
-					variant="primary"
-					icon={FloppyDisk}
-					iconPosition="left"
-					loading={saving || loadingSave}
-					on:click={handleSave}
-				>
-					Сохранить изменения
-				</Button>
-			{:else}
+			{#if saved}
 				<div class="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-medium">
 					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 					</svg>
 					<span>Изменения сохранены</span>
 				</div>
+			{:else}
+				<Button
+					variant="primary"
+					icon={FloppyDisk}
+					iconPosition="left"
+					loading={saving || loadingSave}
+					disabled={!hasChanges}
+					on:click={handleSave}
+				>
+					Сохранить изменения
+				</Button>
 			{/if}
 		</div>
 	</form>

@@ -1634,6 +1634,100 @@ async def proxy_get_draft(
         )
 
 
+@app.post("/api/v1/severnaya/drafts/{draft_id}/generate-name")
+async def proxy_generate_name(
+    draft_id: str,
+    request: Request,
+    user=Depends(get_verified_user)
+):
+    """
+    Проксирует запросы к FastAPI POST /drafts/{id}/generate-name эндпоинту
+    Для генерации названия товара
+    """
+    try:
+        # Подготавливаем заголовки
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        
+        # Прокидываем токен авторизации, если есть
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            headers["authorization"] = auth_header
+        
+        timeout = aiohttp.ClientTimeout(total=120)  # Генерация может занять время
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            timeout=timeout
+        ) as session:
+            async with session.post(
+                f"{FASTAPI_BASE_URL}/drafts/{draft_id}/generate-name",
+                headers=headers,
+            ) as response:
+                response_data = await response.read()
+                return Response(
+                    content=response_data,
+                    status_code=response.status,
+                    media_type=response.headers.get("Content-Type", "application/json"),
+                )
+    except Exception as e:
+        log.error(f"Error proxying generate-name request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error proxying request to FastAPI: {str(e)}"
+        )
+
+
+@app.patch("/api/v1/severnaya/drafts/{draft_id}")
+async def proxy_update_draft(
+    draft_id: str,
+    request: Request,
+    user=Depends(get_verified_user)
+):
+    """
+    Проксирует запросы к FastAPI PATCH /drafts/{id} эндпоинту
+    Для обновления черновика. Возвращает обновлённый DraftCard с predictions.
+    """
+    try:
+        # Получаем тело запроса
+        body = await request.body()
+        
+        # Подготавливаем заголовки
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        
+        # Прокидываем токен авторизации, если есть
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            headers["authorization"] = auth_header
+        
+        timeout = aiohttp.ClientTimeout(total=60)
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            timeout=timeout
+        ) as session:
+            async with session.patch(
+                f"{FASTAPI_BASE_URL}/drafts/{draft_id}",
+                headers=headers,
+                data=body,
+            ) as response:
+                response_data = await response.read()
+                return Response(
+                    content=response_data,
+                    status_code=response.status,
+                    media_type=response.headers.get("Content-Type", "application/json"),
+                )
+    except Exception as e:
+        log.error(f"Error proxying update draft request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error proxying request to FastAPI: {str(e)}"
+        )
+
+
 ##################################
 #
 # Chat Endpoints

@@ -416,6 +416,7 @@ export const getDraft = async (token: string, draftId: string): Promise<DraftCar
 
 /**
  * Обновляет черновик
+ * Возвращает обновлённый DraftCard с пересчитанными predictions
  * 
  * МОК: Если USE_MOCK_DATA = true, возвращает мок-данные
  */
@@ -430,10 +431,10 @@ export const updateDraft = async (
 		return await mockUpdateDraftResponse(draftId, finalData);
 	}
 
-	// Реальный API-вызов
+	// Реальный API-вызов через прокси OWUI
 	let error = null;
 
-	const res = await fetch(`${FASTAPI_BASE_URL}/drafts/${draftId}`, {
+	const res = await fetch(`${WEBUI_API_BASE_URL}/severnaya/drafts/${draftId}`, {
 		method: 'PATCH',
 		headers: {
 			Accept: 'application/json',
@@ -476,10 +477,10 @@ export const generateName = async (
 		return await mockGenerateNameResponse(draftId);
 	}
 
-	// Реальный API-вызов
+	// Реальный API-вызов через прокси OWUI
 	let error = null;
 
-	const res = await fetch(`${FASTAPI_BASE_URL}/drafts/${draftId}/generate-name`, {
+	const res = await fetch(`${WEBUI_API_BASE_URL}/severnaya/drafts/${draftId}/generate-name`, {
 		method: 'POST',
 		headers: {
 			Accept: 'application/json',
