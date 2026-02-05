@@ -1434,7 +1434,7 @@
 												on:click|preventDefault={() => (actionType = 'search')}
 												class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden {actionType ===
 												'search'
-													? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
+													? 'text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-500/15 border border-amber-200/50 dark:border-amber-500/25'
 													: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}"
 												aria-label="Поиск аналогов"
 												aria-pressed={actionType === 'search'}
