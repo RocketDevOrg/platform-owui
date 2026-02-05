@@ -456,6 +456,8 @@
 							</div>
 						{/if}
 					{/if}
+					<!-- ЗАКОММЕНТИРОВАНО: Кнопка редактирования сообщения пользователя -->
+					<!--
 					{#if !readOnly}
 						<Tooltip content={$i18n.t('Edit')} placement="bottom">
 							<button
@@ -483,6 +485,7 @@
 							</button>
 						</Tooltip>
 					{/if}
+					-->
 
 					{#if message?.content}
 						<Tooltip content={$i18n.t('Copy')} placement="bottom">
