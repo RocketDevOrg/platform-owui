@@ -166,6 +166,9 @@
 
 		// Helper function to check if the pressed keys match the shortcut definition
 		const isShortcutMatch = (event: KeyboardEvent, shortcut): boolean => {
+			// Проверяем что event.key существует (может быть undefined при автокомплите браузера)
+			if (!event.key) return false;
+			
 			const keys = shortcut?.keys || [];
 
 			const normalized = keys.map((k) => k.toLowerCase());

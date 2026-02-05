@@ -826,10 +826,15 @@
 										addMessages({ modelId, parentId, messages });
 									}}
 									onSave={({ raw, oldContent, newContent }) => {
-										history.messages[message.id].content = history.messages[
-											message.id
-										].content.replace(raw, raw.replace(oldContent, newContent));
-
+										const currentContent = history.messages[message.id].content;
+										const newRaw = raw.replace(oldContent, newContent);
+										const updatedContent = currentContent.replace(raw, newRaw);
+										
+										console.log('[ResponseMessage onSave] raw found in content:', currentContent.includes(raw));
+										console.log('[ResponseMessage onSave] raw length:', raw.length);
+										console.log('[ResponseMessage onSave] content changed:', currentContent !== updatedContent);
+										
+										history.messages[message.id].content = updatedContent;
 										updateChat();
 									}}
 								/>

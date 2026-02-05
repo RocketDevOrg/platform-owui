@@ -119,7 +119,11 @@
 
 	// Определяем тип источника для ingest (url/file/text)
 	$: currentSourceType = (() => {
-		const hasFile = files.some((f) => f.type === 'file' && f.file instanceof File);
+		// Проверяем наличие файла: либо type='file' с File объектом, либо type='image'
+		const hasFile = files.some((f) => 
+			(f.type === 'file' && f.file instanceof File) || 
+			f.type === 'image'
+		);
 		return determineSourceType(prompt, hasFile ? new File([], '') : undefined);
 	})();
 
@@ -574,18 +578,18 @@
 			return null;
 		}
 
-		files = [...files, fileItem];
-
 		// ИЗМЕНЕНО: Если выбрано действие "Создать карточку" или "Поиск аналогов", 
 		// просто сохраняем файл в массиве как File объект
 		// Файл будет отправлен в FastAPI только при нажатии "Отправить сообщение" вместе с текстом
 		if (actionType === 'ingest' || actionType === 'search') {
 			fileItem.status = 'ready'; // Готов к отправке
 			fileItem.file = file; // Сохраняем оригинальный File объект для отправки
-			files = files;
-			console.log(`File added to form data (will be sent on submit for ${actionType}):`, file.name);
+			files = [...files, fileItem]; // Добавляем файл с уже установленным File объектом
+			console.log(`File added to form data (will be sent on submit for ${actionType}):`, file.name, fileItem.file instanceof File);
 			return;
 		}
+
+		files = [...files, fileItem];
 
 		if (!$temporaryChatEnabled) {
 			try {

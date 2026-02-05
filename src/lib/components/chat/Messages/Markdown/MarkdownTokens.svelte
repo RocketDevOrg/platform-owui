@@ -115,11 +115,17 @@
 				edit={editCodeBlock}
 				stickyButtonsClassName={topPadding ? 'top-10' : 'top-0'}
 				onSave={(value) => {
-					onSave({
-						raw: token.raw,
-						oldContent: token.text,
-						newContent: value
-					});
+					// Если value - объект с raw/oldContent/newContent, используем его напрямую
+					if (typeof value === 'object' && value.raw && value.newContent) {
+						onSave(value);
+					} else {
+						// Иначе формируем объект из token
+						onSave({
+							raw: token.raw,
+							oldContent: token.text,
+							newContent: value
+						});
+					}
 				}}
 				{onUpdate}
 				{onPreview}

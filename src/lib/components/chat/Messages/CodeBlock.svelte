@@ -521,9 +521,9 @@
 						onSave={async (formData) => {
 							if (!widgetData?.draft) return false;
 							try {
-								const token = localStorage.token || '';
+								const authToken = localStorage.token || '';
 								console.log('[DraftCard] Saving draft:', widgetData.draft.id, formData);
-								const response = await updateDraft(token, widgetData.draft.id, {
+								const response = await updateDraft(authToken, widgetData.draft.id, {
 									generated_name: formData.generated_name,
 									kind: formData.kind,
 									type: formData.type,
@@ -533,8 +533,15 @@
 									specs: formData.specs
 								});
 								
-								// Обновляем widgetData с данными из ответа (включая predictions)
+								console.log('[DraftCard] updateDraft response:', response);
+								
+								// Сохраняем текущий код для замены (используем _code, не code)
+								const oldCode = _code || code;
+								const oldRaw = `\`\`\`widget\n${oldCode}\n\`\`\``;
+								
+								// Обновляем widgetData с данными из ответа или из formData
 								if (response?.draft) {
+									// Если сервер вернул полный draft, используем его
 									widgetData = {
 										...widgetData,
 										draft: {
@@ -547,7 +554,47 @@
 										}
 									};
 									console.log('[DraftCard] Draft updated with response:', response.draft);
+								} else {
+									// Сервер не вернул полный draft, обновляем из отправленных данных
+									widgetData = {
+										...widgetData,
+										draft: {
+											...widgetData.draft,
+											final_data: {
+												...widgetData.draft.final_data,
+												generated_name: formData.generated_name,
+												kind: formData.kind,
+												type: formData.type,
+												brand: formData.brand,
+												article: formData.article,
+												description: formData.description,
+												specs: formData.specs
+											}
+										}
+									};
+									console.log('[DraftCard] Draft updated with formData');
 								}
+								
+								// Обновляем код виджета и сохраняем в историю чата
+								const updatedWidgetJson = {
+									type: 'widget',
+									widget_type: 'draft',
+									widget_data: widgetData
+								};
+								const newCode = JSON.stringify(updatedWidgetJson, null, 2);
+								
+								// Обновляем локальную переменную code
+								_code = newCode;
+								
+								// Вызываем onSave для сохранения в историю чата
+								// Передаём объект с актуальными данными для корректной замены
+								console.log('[DraftCard] Saving to chat - oldCode length:', oldCode.length, 'newCode length:', newCode.length);
+								onSave({
+									raw: oldRaw,
+									oldContent: oldCode,
+									newContent: newCode
+								});
+								console.log('[DraftCard] Widget content saved to chat history');
 								
 								console.log('[DraftCard] Draft saved successfully');
 								return true;

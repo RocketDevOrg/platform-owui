@@ -284,15 +284,18 @@ export const ingestWithFormData = async (
 	const formData = new FormData();
 	formData.append('source_type', sourceType);
 	
+	// Добавляем только нужные поля согласно source_type (по API документации)
 	if (sourceType === 'file' && file) {
+		// Для file: обязательно file, опционально text
 		formData.append('file', file);
-		// Опционально: добавляем текст как дополнительное описание
 		if (text && text.trim()) {
 			formData.append('text', text.trim());
 		}
 	} else if (sourceType === 'url') {
+		// Для url: только url
 		formData.append('url', text.trim());
 	} else {
+		// Для text: только text
 		formData.append('text', text);
 	}
 

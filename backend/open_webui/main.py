@@ -1474,7 +1474,9 @@ async def proxy_ingest(
                         content_type=value.content_type
                     )
                 else:
-                    data.add_field(key, value)
+                    # Не добавляем пустые строки (кроме source_type который всегда нужен)
+                    if value or key == 'source_type':
+                        data.add_field(key, value)
             
             async with aiohttp.ClientSession(
                 trust_env=True,

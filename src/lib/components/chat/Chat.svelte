@@ -2241,8 +2241,32 @@
 			}
 			
 			// Находим файл в сообщении пользователя (сохраняем оригинальный File объект)
-			const fileItem = userMessage?.files?.find((item) => item.type === 'file' && item.file instanceof File);
-			const file = fileItem?.file instanceof File ? fileItem.file : null;
+			// Ищем либо type='file' с File объектом, либо type='image' с URL (для изображений)
+			const fileItem = userMessage?.files?.find((item) => 
+				(item.type === 'file' && item.file instanceof File) || 
+				item.type === 'image'
+			);
+			
+			// Для type='file' берём File объект, для type='image' конвертируем URL в File
+			let file: File | null = null;
+			if (fileItem?.type === 'file' && fileItem.file instanceof File) {
+				file = fileItem.file;
+			} else if (fileItem?.type === 'image' && fileItem.url) {
+				// Конвертируем base64/URL изображения в File объект
+				try {
+					const response = await fetch(fileItem.url);
+					const blob = await response.blob();
+					file = new File([blob], 'image.png', { type: blob.type || 'image/png' });
+				} catch (e) {
+					console.error('Failed to convert image to file:', e);
+				}
+			}
+			
+			console.log('[Ingest] File search result:', { 
+				userMessageFiles: userMessage?.files, 
+				fileItem, 
+				file: file ? { name: file.name, type: file.type, size: file.size } : null 
+			});
 
 			try {
 				if (actionType === 'ingest') {
