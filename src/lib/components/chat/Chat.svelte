@@ -91,6 +91,7 @@
 	import Banner from '../common/Banner.svelte';
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
+	import ChatScrollbar from '$lib/components/chat/ChatScrollbar.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	// import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -3114,6 +3115,12 @@
 									/>
 								</div>
 							</div>
+
+							<!-- Навигация по сообщениям справа -->
+							<ChatScrollbar
+								messages={createMessagesList(history, history.currentId)}
+								container={messagesContainerElement}
+							/>
 
 							<div class=" pb-2 z-10">
 								<MessageInput
