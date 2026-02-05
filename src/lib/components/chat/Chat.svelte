@@ -1228,14 +1228,14 @@
 							
 							// Обновляем meta для отражения нового статуса
 							if (widgetJson.widget_data.meta) {
-								const isProcessing = draftData.status === 'new' || draftData.status === 'processing';
+								const isProcessing = draftData.status === 'new' || draftData.status === 'processing' || draftData.status === 'queued';
 								widgetJson.widget_data.meta.is_processing = isProcessing;
 								widgetJson.widget_data.meta.can_edit = !isProcessing;
 								widgetJson.widget_data.meta.can_commit = !isProcessing;
 							}
 							
 							// Обновляем текст статуса в зависимости от статуса черновика
-							const isProcessing = draftData.status === 'new' || draftData.status === 'processing';
+							const isProcessing = draftData.status === 'new' || draftData.status === 'processing' || draftData.status === 'queued';
 							const statusText = isProcessing 
 								? 'Карточка создана, идёт обработка...\n\n'
 								: 'Черновик карточки готов к редактированию.\n\n';
@@ -1289,8 +1289,8 @@
 			const updated = updateDraftWidgetInHistory(draftId, draft);
 			console.log('[Polling] Widget update result:', updated);
 
-			// Проверяем статус - если не processing, останавливаем polling
-			if (draft.status !== 'new' && draft.status !== 'processing') {
+			// Проверяем статус - если не processing/new/queued, останавливаем polling
+			if (draft.status !== 'new' && draft.status !== 'processing' && draft.status !== 'queued') {
 				console.log('[Polling] Draft processing complete, status:', draft.status);
 				
 				// Удаляем pending draft из базы
@@ -2254,7 +2254,7 @@
 						console.log('Ingest successful:', response);
 						
 						// Определяем статус обработки
-						const isProcessing = response.status === 'processing' || response.status === 'new';
+						const isProcessing = response.status === 'processing' || response.status === 'new' || response.status === 'queued';
 						
 						// Создаем ответное сообщение с виджетом черновика
 						const widgetData = {

@@ -66,7 +66,7 @@
 		!predictions?.duplicates?.last_checked_at;
 	
 	// Определяем, нужно ли показывать loading состояние
-	$: showLoading = isProcessing || status === 'new' || status === 'processing';
+	$: showLoading = isProcessing || status === 'new' || status === 'processing' || status === 'queued';
 
 	// Локальные значения для редактирования
 	let titleValue = title;

@@ -27,7 +27,7 @@ const FASTAPI_CHAT_URL = import.meta.env.VITE_FASTAPI_CHAT_URL || `${FASTAPI_BAS
 
 export interface DraftCard {
 	id: string;
-	status: 'new' | 'processing' | 'ready_for_review' | 'synced' | 'error';
+	status: 'new' | 'queued' | 'processing' | 'ready_for_review' | 'synced' | 'error';
 	extracted_data?: Record<string, any>;
 	final_data?: {
 		kind?: string;

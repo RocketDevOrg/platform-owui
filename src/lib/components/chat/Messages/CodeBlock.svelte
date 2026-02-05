@@ -477,7 +477,7 @@
 		{#if lang === 'widget'}
 			{#if widgetData && widgetData.draft}
 				{@const draftStatus = widgetData.draft.status || ''}
-				{@const draftIsProcessing = widgetData.meta?.is_processing || draftStatus === 'new' || draftStatus === 'processing'}
+				{@const draftIsProcessing = widgetData.meta?.is_processing || draftStatus === 'new' || draftStatus === 'processing' || draftStatus === 'queued'}
 				<div class="p-4">
 					<DraftCard
 						images={((widgetData.draft.final_data?.images || []) as string[]).map((url) => ({ src: url, alt: '' }))}
